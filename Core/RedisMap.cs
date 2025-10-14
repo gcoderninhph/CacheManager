@@ -198,7 +198,10 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		TriggerClearHandlers();
 	}
 
-	public async Task<IEnumerable<MapEntryData>> GetAllEntriesAsync()
+	/// <summary>
+	/// Get all entries for dashboard display (includes version info)
+	/// </summary>
+	public async Task<IEnumerable<MapEntryData>> GetAllEntriesForDashboardAsync()
 	{
 		var db = _redis.GetDatabase(_database);
 		var hashKey = GetHashKey();
@@ -388,6 +391,237 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			HasPrev = page > 1
 		};
 	}
+
+	#region IMap<TKey, TValue> Implementation - Basic Operations
+
+	public async Task<bool> ContainsKeyAsync(TKey key)
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		var fieldName = SerializeKey(key);
+		return await db.HashExistsAsync(hashKey, fieldName);
+	}
+
+	public async Task<int> CountAsync()
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		return (int)await db.HashLengthAsync(hashKey);
+	}
+
+	public async Task<IEnumerable<TValue>> GetAllValuesAsync()
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		var values = await db.HashValuesAsync(hashKey);
+		
+		var result = new List<TValue>();
+		foreach (var value in values)
+		{
+			try
+			{
+				var deserializedValue = DeserializeValue(value!);
+				if (deserializedValue != null)
+				{
+					result.Add(deserializedValue);
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+		
+		return result;
+	}
+
+	public async Task<IEnumerable<TKey>> GetAllKeysAsync()
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		var entries = await db.HashGetAllAsync(hashKey);
+		
+		var result = new List<TKey>();
+		foreach (var entry in entries)
+		{
+			try
+			{
+				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
+				if (key != null)
+				{
+					result.Add(key);
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+		
+		return result;
+	}
+
+	public async Task<IEnumerable<IEntry<TKey, TValue>>> GetAllEntriesAsync()
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		var entries = await db.HashGetAllAsync(hashKey);
+		
+		var result = new List<IEntry<TKey, TValue>>();
+		foreach (var entry in entries)
+		{
+			try
+			{
+				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
+				var value = DeserializeValue(entry.Value!);
+				
+				if (key != null && value != null)
+				{
+					result.Add(new Entry<TKey, TValue>(key, value));
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+		
+		return result;
+	}
+
+	#endregion
+
+	#region IMap<TKey, TValue> Implementation - Streaming Operations (Memory Optimized)
+
+	/// <summary>
+	/// Stream all keys với HSCAN - tối ưu memory cho map có hàng triệu phần tử
+	/// Không load toàn bộ keys vào memory cùng lúc
+	/// </summary>
+	public async Task GetAllKeysAsync(Action<TKey> keyAction)
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		
+		// HSCAN với batch size 1000 - Redis tự động stream từng batch
+		await foreach (var entry in db.HashScanAsync(hashKey, pattern: "*", pageSize: 1000))
+		{
+			try
+			{
+				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
+				if (key != null)
+				{
+					keyAction(key);
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+	}
+
+	/// <summary>
+	/// Stream all values với HSCAN - tối ưu memory cho map có hàng triệu phần tử
+	/// Không load toàn bộ values vào memory cùng lúc
+	/// </summary>
+	public async Task GetAllValuesAsync(Action<TValue> valueAction)
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		
+		// HSCAN với batch size 1000 - Redis tự động stream từng batch
+		await foreach (var entry in db.HashScanAsync(hashKey, pattern: "*", pageSize: 1000))
+		{
+			try
+			{
+				var value = DeserializeValue(entry.Value!);
+				if (value != null)
+				{
+					valueAction(value);
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+	}
+
+	/// <summary>
+	/// Stream all entries với HSCAN - tối ưu memory cho map có hàng triệu phần tử
+	/// Không load toàn bộ entries vào memory cùng lúc
+	/// </summary>
+	public async Task GetAllEntriesAsync(Action<IEntry<TKey, TValue>> entryAction)
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		
+		// HSCAN với batch size 1000 - Redis tự động stream từng batch
+		await foreach (var entry in db.HashScanAsync(hashKey, pattern: "*", pageSize: 1000))
+		{
+			try
+			{
+				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
+				var value = DeserializeValue(entry.Value!);
+				
+				if (key != null && value != null)
+				{
+					entryAction(new Entry<TKey, TValue>(key, value));
+				}
+			}
+			catch
+			{
+				// Skip invalid entries
+			}
+		}
+	}
+
+	public async Task<bool> RemoveAsync(TKey key)
+	{
+		var db = _redis.GetDatabase(_database);
+		var hashKey = GetHashKey();
+		var fieldName = SerializeKey(key);
+		
+		// Lấy value trước khi xóa để trigger callback
+		var existingValue = await db.HashGetAsync(hashKey, fieldName);
+		if (!existingValue.HasValue)
+		{
+			return false;
+		}
+		
+		var deleted = await db.HashDeleteAsync(hashKey, fieldName);
+		
+		if (deleted)
+		{
+			// Xóa khỏi version cache
+			_versionCache.TryRemove(key, out _);
+			
+			// Xóa khỏi access time tracking nếu có TTL
+			if (_itemTtl.HasValue)
+			{
+				var accessTimeKey = GetAccessTimeKey();
+				await db.SortedSetRemoveAsync(accessTimeKey, fieldName);
+			}
+			
+			// Trigger callback
+			try
+			{
+				var value = DeserializeValue(existingValue!);
+				if (value != null)
+				{
+					TriggerRemoveHandlers(key, value);
+				}
+			}
+			catch
+			{
+				// Skip if deserialization fails
+			}
+		}
+		
+		return deleted;
+	}
+
+	#endregion
 
 	private void ProcessBatch(object? state)
 	{

@@ -109,7 +109,7 @@ public class MapController : ControllerBase
                 return NotFound(new { error = $"Map '{mapName}' not found" });
             }
 
-            var method = mapInstance.GetType().GetMethod("GetAllEntriesAsync");
+            var method = mapInstance.GetType().GetMethod("GetAllEntriesForDashboardAsync");
             if (method != null)
             {
                 var task = method.Invoke(mapInstance, null) as Task;

@@ -47,7 +47,56 @@ public interface IMap<TKey, TValue>
     /// Callback khi một phần tử hết hạn và bị xóa tự động
     /// </summary>
     void OnExpired(Action<TKey, TValue> expiredAction);
+    /// <summary>
+    /// Kiểm tra key có tồn tại trong map không
+    /// </summary>
+    /// <param name="key"></param>
+    /// <returns></returns>
+    Task<bool> ContainsKeyAsync(TKey key);
+    /// <summary>
+    /// Số phần tử trong map
+    /// </summary>
+    /// <returns></returns>
+    Task<int> CountAsync();
 
+    /// <summary>
+    /// Lấy tất cả keys, values, entries trong map
+    /// </summary>
+    Task<IEnumerable<TValue>> GetAllValuesAsync();
+    /// <summary>
+    /// Lấy tất cả keys, values, entries trong map
+    /// </summary>
+    /// <returns></returns>
+    Task<IEnumerable<TKey>> GetAllKeysAsync();
+    /// <summary>
+    /// Lấy tất cả keys, values, entries trong map
+    /// </summary>
+    /// <returns></returns>
+    Task<IEnumerable<IEntry<TKey, TValue>>> GetAllEntriesAsync();
+
+    /// <summary>
+    /// Duyệt tất cả keys trong map, tôi ưu cho trường hợp map có rất nhiều phần tử
+    /// </summary>
+    /// <param name="keyAction"></param>
+    /// <returns></returns>
+    Task GetAllKeysAsync(Action<TKey> keyAction);
+    /// <summary>
+    /// Duyệt tất cả values trong map, tôi ưu cho trường hợp map có rất nhiều phần tử
+    /// </summary>
+    /// <param name="valueAction"></param>
+    /// <returns></returns>
+    Task GetAllValuesAsync(Action<TValue> valueAction);
+    /// <summary>
+    /// Duyệt tất cả entries trong map, tôi ưu cho trường hợp map có rất nhiều phần tử
+    /// </summary>
+    Task GetAllEntriesAsync(Action<IEntry<TKey, TValue>> entryAction);
+    /// <summary>
+    /// Xóa một phần tử trong map
+    /// </summary>
+    Task<bool> RemoveAsync(TKey key);
+    /// <summary>
+    /// Xóa tất cả phần tử trong map
+    /// </summary>
     Task ClearAsync();
 }
 

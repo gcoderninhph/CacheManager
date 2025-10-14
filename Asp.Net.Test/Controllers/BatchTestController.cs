@@ -142,7 +142,7 @@ public class BatchTestController : ControllerBase
             return NotFound(new { error = "Products map not found" });
         }
 
-        var method = mapInstance.GetType().GetMethod("GetAllEntriesAsync");
+        var method = mapInstance.GetType().GetMethod("GetAllEntriesForDashboardAsync");
         if (method != null)
         {
             var task = method.Invoke(mapInstance, null) as Task;
