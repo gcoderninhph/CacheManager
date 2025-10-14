@@ -279,6 +279,7 @@ builder.Services.AddCacheManager(options =>
 - **[USERINFO_API_GUIDE.md](USERINFO_API_GUIDE.md)** - UserInfo CRUD API examples
 - **[JSON_SERIALIZATION_GUIDE.md](JSON_SERIALIZATION_GUIDE.md)** - JSON serialization guide
 - **[TTL_GUIDE.md](TTL_GUIDE.md)** - Item TTL (Time To Live) guide
+- **[TEST_GUIDE.md](TEST_GUIDE.md)** - TTL & Batch Update testing guide
 
 ## 🏷️ API Endpoints
 

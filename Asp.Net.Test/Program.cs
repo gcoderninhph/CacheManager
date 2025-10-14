@@ -19,8 +19,9 @@ builder.Services.AddSwaggerGen(c =>
 // Add CacheManager from appsettings.json
 builder.Services.AddCacheManager(builder.Configuration);
 
-// Register background service for cache registration
+// Register background services
 builder.Services.AddHostedService<CacheRegistrationBackgroundService>();
+builder.Services.AddHostedService<ProductUpdateBackgroundService>();
 
 var app = builder.Build();
 
