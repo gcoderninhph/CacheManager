@@ -15,7 +15,8 @@ namespace CacheManager.Core;
 public interface ICacheStorage
 {
 	IMap<TKey, TValue> GetMap<TKey, TValue>(string mapName) where TKey : notnull;
-	IEnumerable<string> GetAllMapNames();
+	Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName) where TKey : notnull;
+	Task<IEnumerable<string>> GetAllMapNames();
 	IEnumerable<string> GetAllBucketNames();
 	object? GetMapInstance(string mapName);
 }
@@ -51,7 +52,24 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		throw new KeyNotFoundException($"Map '{mapName}' not found. Please register it first.");
 	}
 
-	public IEnumerable<string> GetAllMapNames() => _maps.Keys.ToList();
+	public async Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName) where TKey : notnull
+	{
+		if (_maps.TryGetValue(mapName, out var existing))
+		{
+			return (IMap<TKey, TValue>)existing;
+		}
+
+		// Create new map if not exists
+		RegisterMap<TKey, TValue>(mapName);
+		return await Task.FromResult(GetMap<TKey, TValue>(mapName));
+	}
+
+	public async Task<IEnumerable<string>> GetAllMapNames()
+	{
+		return await Task.FromResult(_maps.Keys
+			.Where(name => !name.Contains(":__meta:")) // ✅ Filter out internal metadata keys
+			.ToList());
+	}
 
 	public IEnumerable<string> GetAllBucketNames() => _buckets.Keys.ToList();
 

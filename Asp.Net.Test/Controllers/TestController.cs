@@ -59,4 +59,52 @@ public class TestController : ControllerBase
             message = "Test data added: 50 user-sessions, 30 user-data, 25 user-info!" 
         });
     }
+
+    /// <summary>
+    /// Get all map names (to verify __meta keys are filtered)
+    /// </summary>
+    [HttpGet("list-maps")]
+    public async Task<IActionResult> ListMaps()
+    {
+        var mapNames = (await _storage.GetAllMapNames()).ToList();
+        var hasMetaKeys = mapNames.Any(name => name.Contains("__meta:"));
+        
+        return Ok(new 
+        { 
+            success = !hasMetaKeys,
+            mapCount = mapNames.Count,
+            maps = mapNames,
+            hasMetadataKeys = hasMetaKeys,
+            message = hasMetaKeys 
+                ? "❌ ERROR: Metadata keys visible!" 
+                : "✅ SUCCESS: Metadata keys filtered correctly"
+        });
+    }
+
+    /// <summary>
+    /// Set TTL for a map (to test Redis TTL storage)
+    /// </summary>
+    [HttpGet("set-map-ttl")]
+    public IActionResult SetMapTtl([FromQuery] string mapName, [FromQuery] int ttlMinutes)
+    {
+        try
+        {
+            var map = _storage.GetMap<string, string>(mapName);
+            map.SetItemExpiration(TimeSpan.FromMinutes(ttlMinutes));
+            
+            return Ok(new 
+            { 
+                success = true,
+                message = $"✅ TTL set to {ttlMinutes} minutes for map '{mapName}'. TTL config stored in Redis: map:{mapName}:__meta:ttl-config"
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new 
+            { 
+                success = false,
+                message = $"❌ Error: {ex.Message}"
+            });
+        }
+    }
 }

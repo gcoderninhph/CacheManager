@@ -22,10 +22,15 @@ public interface IRegisterBuilder
     /// <typeparam name="Value"></typeparam>
     /// <returns></returns>
     IRegisterBuilder CreateMap<Key, Value>(string mapName) where Key : notnull;
-    IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan expiration) where Key : notnull;
+	IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan expiration) where Key : notnull;
     
     /// <summary>
     /// Tạo map với TTL cho từng phần tử
+	/// Nếu một phần tử không có bất kỳ hoạt động nào (Get/Set) trong khoảng thời gian này, nó sẽ tự động bị xóa
+	/// Logic: Dùng Redis Sorted Set phụ để tracking thời gian truy cập cuối cùng
+	/// <paramref name="mapName"/>: Tên của map
+	/// <paramref name="expiration"/>: Thời gian hết hạn của toàn bộ map, nếu không có hoạt động nào (Get/Set) trên map trong khoảng thời gian này, toàn bộ map sẽ bị xóa, nếu null thì tắt tính năng này
+	/// <paramref name="itemTtl"/>: Thời gian hết hạn. Nếu null thì tắt TTL
     /// </summary>
     IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan? expiration, TimeSpan? itemTtl) where Key : notnull;
     
