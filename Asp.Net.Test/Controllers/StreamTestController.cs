@@ -37,41 +37,24 @@ public class StreamTestController : ControllerBase
         var count = 0;
         var keys = new List<string>();
 
-        // Stream keys thay vì load tất cả vào memory
-        var streamMethod = mapInstance.GetType().GetMethod("GetAllKeysAsync", new[] { typeof(Action<>).MakeGenericType(mapInstance.GetType().GetGenericArguments()[0]) });
-        
-        if (streamMethod != null)
+        try
         {
+            // Use generic helper method to handle typed invocation
             var keyType = mapInstance.GetType().GetGenericArguments()[0];
-            var actionType = typeof(Action<>).MakeGenericType(keyType);
+            var valueType = mapInstance.GetType().GetGenericArguments()[1];
             
-            // Create delegate to collect keys
-            var keyAction = Delegate.CreateDelegate(
-                actionType,
-                this,
-                GetType().GetMethod(nameof(CollectKey), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.MakeGenericMethod(keyType)
-            );
-
-            // Temporary storage for streaming
-            var tempKeys = new List<object>();
+            var helperMethod = typeof(StreamTestController)
+                .GetMethod(nameof(StreamKeysGeneric), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
             
-            // Simple approach: use reflection to call with inline action
-            var task = (Task?)streamMethod.Invoke(mapInstance, new object[] {
-                Delegate.CreateDelegate(
-                    actionType,
-                    new Action<object>(key => {
-                        tempKeys.Add(key);
-                        count++;
-                    }).Target,
-                    typeof(Action<object>).GetMethod("Invoke")!
-                )
-            });
-
-            if (task != null)
-            {
-                await task;
-                keys = tempKeys.Select(k => k.ToString() ?? "").ToList();
-            }
+            var result = await (Task<(int, List<string>)>)helperMethod.Invoke(this, new[] { mapInstance })!;
+            count = result.Item1;
+            keys = result.Item2;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error streaming keys from map {MapName}", mapName);
+            return StatusCode(500, new { error = ex.Message });
         }
 
         sw.Stop();
@@ -86,9 +69,19 @@ public class StreamTestController : ControllerBase
         });
     }
 
-    private void CollectKey<TKey>(TKey key)
+    private async Task<(int, List<string>)> StreamKeysGeneric<TKey, TValue>(object mapInstance) where TKey : notnull
     {
-        // Helper method for delegate creation
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var count = 0;
+        var keys = new List<string>();
+        
+        await map.GetAllKeysAsync(key => 
+        {
+            keys.Add(key?.ToString() ?? "");
+            count++;
+        });
+        
+        return (count, keys);
     }
 
     /// <summary>
@@ -108,32 +101,23 @@ public class StreamTestController : ControllerBase
         var count = 0;
         var sampleValues = new List<object>();
 
-        // Stream values - chỉ lấy sample 5 cái đầu
-        var streamMethod = mapInstance.GetType().GetMethod("GetAllValuesAsync", new[] { typeof(Action<>).MakeGenericType(mapInstance.GetType().GetGenericArguments()[1]) });
-        
-        if (streamMethod != null)
+        try
         {
+            var keyType = mapInstance.GetType().GetGenericArguments()[0];
             var valueType = mapInstance.GetType().GetGenericArguments()[1];
-            var actionType = typeof(Action<>).MakeGenericType(valueType);
             
-            var task = (Task?)streamMethod.Invoke(mapInstance, new object[] {
-                Delegate.CreateDelegate(
-                    actionType,
-                    new Action<object>(value => {
-                        count++;
-                        if (count <= 5)
-                        {
-                            sampleValues.Add(value);
-                        }
-                    }).Target,
-                    typeof(Action<object>).GetMethod("Invoke")!
-                )
-            });
-
-            if (task != null)
-            {
-                await task;
-            }
+            var helperMethod = typeof(StreamTestController)
+                .GetMethod(nameof(StreamValuesGeneric), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
+            
+            var result = await (Task<(int, List<object>)>)helperMethod.Invoke(this, new[] { mapInstance })!;
+            count = result.Item1;
+            sampleValues = result.Item2;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error streaming values from map {MapName}", mapName);
+            return StatusCode(500, new { error = ex.Message });
         }
 
         sw.Stop();
@@ -146,6 +130,24 @@ public class StreamTestController : ControllerBase
             sampleValues,
             note = "Streaming approach - only loaded 5 samples into memory"
         });
+    }
+
+    private async Task<(int, List<object>)> StreamValuesGeneric<TKey, TValue>(object mapInstance) where TKey : notnull
+    {
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var count = 0;
+        var sampleValues = new List<object>();
+        
+        await map.GetAllValuesAsync(value => 
+        {
+            count++;
+            if (count <= 5 && value != null)
+            {
+                sampleValues.Add(value);
+            }
+        });
+        
+        return (count, sampleValues);
     }
 
     /// <summary>
@@ -165,40 +167,23 @@ public class StreamTestController : ControllerBase
         var count = 0;
         var sampleEntries = new List<object>();
 
-        // Stream entries - chỉ collect limited items
-        var streamMethod = mapInstance.GetType().GetMethod("GetAllEntriesAsync", new[] { typeof(Action<>).MakeGenericType(typeof(IEntry<,>).MakeGenericType(mapInstance.GetType().GetGenericArguments())) });
-        
-        if (streamMethod != null)
+        try
         {
             var keyType = mapInstance.GetType().GetGenericArguments()[0];
             var valueType = mapInstance.GetType().GetGenericArguments()[1];
-            var entryType = typeof(IEntry<,>).MakeGenericType(keyType, valueType);
-            var actionType = typeof(Action<>).MakeGenericType(entryType);
             
-            var task = (Task?)streamMethod.Invoke(mapInstance, new object[] {
-                Delegate.CreateDelegate(
-                    actionType,
-                    new Action<object>(entry => {
-                        count++;
-                        if (count <= limit)
-                        {
-                            var getKeyMethod = entry.GetType().GetMethod("GetKey");
-                            var getValueMethod = entry.GetType().GetMethod("GetValue");
-                            
-                            sampleEntries.Add(new {
-                                key = getKeyMethod?.Invoke(entry, null),
-                                value = getValueMethod?.Invoke(entry, null)
-                            });
-                        }
-                    }).Target,
-                    typeof(Action<object>).GetMethod("Invoke")!
-                )
-            });
-
-            if (task != null)
-            {
-                await task;
-            }
+            var helperMethod = typeof(StreamTestController)
+                .GetMethod(nameof(StreamEntriesGeneric), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
+            
+            var result = await (Task<(int, List<object>)>)helperMethod.Invoke(this, new object[] { mapInstance, limit })!;
+            count = result.Item1;
+            sampleEntries = result.Item2;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error streaming entries from map {MapName}", mapName);
+            return StatusCode(500, new { error = ex.Message });
         }
 
         sw.Stop();
@@ -214,6 +199,27 @@ public class StreamTestController : ControllerBase
         });
     }
 
+    private async Task<(int, List<object>)> StreamEntriesGeneric<TKey, TValue>(object mapInstance, int limit) where TKey : notnull
+    {
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var count = 0;
+        var sampleEntries = new List<object>();
+        
+        await map.GetAllEntriesAsync(entry => 
+        {
+            count++;
+            if (count <= limit)
+            {
+                sampleEntries.Add(new {
+                    key = entry.GetKey(),
+                    value = entry.GetValue()
+                });
+            }
+        });
+        
+        return (count, sampleEntries);
+    }
+
     /// <summary>
     /// Compare memory usage: GetAllEntriesAsync() vs GetAllEntriesAsync(Action)
     /// GET /api/streamtest/compare?mapName=products
@@ -227,104 +233,96 @@ public class StreamTestController : ControllerBase
             return NotFound(new { error = $"Map '{mapName}' not found" });
         }
 
-        var results = new Dictionary<string, object>();
-
-        // Test 1: GetAllEntriesAsync() - Load all into memory
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        var memBefore1 = GC.GetTotalMemory(false);
-        var sw1 = Stopwatch.StartNew();
-
-        var getAllMethod = mapInstance.GetType().GetMethod("GetAllEntriesAsync", Type.EmptyTypes);
-        if (getAllMethod != null)
-        {
-            var task = getAllMethod.Invoke(mapInstance, null) as Task;
-            if (task != null)
-            {
-                await task;
-                var resultProp = task.GetType().GetProperty("Result");
-                var entries = resultProp?.GetValue(task);
-                
-                var memAfter1 = GC.GetTotalMemory(false);
-                sw1.Stop();
-
-                var count = 0;
-                if (entries != null)
-                {
-                    var enumerable = entries as System.Collections.IEnumerable;
-                    if (enumerable != null)
-                    {
-                        foreach (var _ in enumerable)
-                        {
-                            count++;
-                        }
-                    }
-                }
-
-                results["getAllEntries"] = new
-                {
-                    method = "GetAllEntriesAsync()",
-                    count,
-                    elapsedMs = sw1.ElapsedMilliseconds,
-                    memoryUsedBytes = memAfter1 - memBefore1,
-                    memoryUsedMB = (memAfter1 - memBefore1) / 1024.0 / 1024.0,
-                    note = "Loads all entries into memory at once"
-                };
-            }
-        }
-
-        // Clean up
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        // Test 2: GetAllEntriesAsync(Action) - Stream
-        var memBefore2 = GC.GetTotalMemory(false);
-        var sw2 = Stopwatch.StartNew();
-        var count2 = 0;
-
         var keyType = mapInstance.GetType().GetGenericArguments()[0];
         var valueType = mapInstance.GetType().GetGenericArguments()[1];
-        var entryType = typeof(IEntry<,>).MakeGenericType(keyType, valueType);
-        var actionType = typeof(Action<>).MakeGenericType(entryType);
-        
-        var streamMethod = mapInstance.GetType().GetMethod("GetAllEntriesAsync", new[] { actionType });
-        if (streamMethod != null)
-        {
-            var task = (Task?)streamMethod.Invoke(mapInstance, new object[] {
-                Delegate.CreateDelegate(
-                    actionType,
-                    new Action<object>(_ => count2++).Target,
-                    typeof(Action<object>).GetMethod("Invoke")!
-                )
-            });
 
-            if (task != null)
+        try
+        {
+            // Test 1: GetAllEntriesAsync() - Load all into memory
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            var memBefore1 = GC.GetTotalMemory(false);
+            var sw1 = Stopwatch.StartNew();
+
+            var loadAllMethod = typeof(StreamTestController)
+                .GetMethod(nameof(CompareMemoryUsage_LoadAll), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
+            
+            var loadAllCount = await (Task<int>)loadAllMethod.Invoke(this, new[] { mapInstance })!;
+            
+            var memAfter1 = GC.GetTotalMemory(false);
+            sw1.Stop();
+
+            var loadAllResult = new
             {
-                await task;
-            }
+                method = "GetAllEntriesAsync()",
+                count = loadAllCount,
+                elapsedMs = sw1.ElapsedMilliseconds,
+                memoryUsedBytes = memAfter1 - memBefore1,
+                memoryUsedMB = (memAfter1 - memBefore1) / 1024.0 / 1024.0,
+                note = "Loads all entries into memory at once"
+            };
+
+            // Clean up
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            // Test 2: GetAllEntriesAsync(Action) - Stream
+            var memBefore2 = GC.GetTotalMemory(false);
+            var sw2 = Stopwatch.StartNew();
+
+            var streamingMethod = typeof(StreamTestController)
+                .GetMethod(nameof(CompareMemoryUsage_Streaming), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
+            
+            var streamingCount = await (Task<int>)streamingMethod.Invoke(this, new[] { mapInstance })!;
+
+            var memAfter2 = GC.GetTotalMemory(false);
+            sw2.Stop();
+
+            var streamResult = new
+            {
+                method = "GetAllEntriesAsync(Action<IEntry>)",
+                count = streamingCount,
+                elapsedMs = sw2.ElapsedMilliseconds,
+                memoryUsedBytes = memAfter2 - memBefore2,
+                memoryUsedMB = (memAfter2 - memBefore2) / 1024.0 / 1024.0,
+                note = "Streams entries one by one - memory efficient"
+            };
+
+            return Ok(new
+            {
+                mapName,
+                comparison = new
+                {
+                    getAllEntries = loadAllResult,
+                    streamEntries = streamResult
+                },
+                recommendation = "Use GetAllEntriesAsync(Action) for large datasets to avoid OutOfMemoryException"
+            });
         }
-
-        var memAfter2 = GC.GetTotalMemory(false);
-        sw2.Stop();
-
-        results["streamEntries"] = new
+        catch (Exception ex)
         {
-            method = "GetAllEntriesAsync(Action<IEntry>)",
-            count = count2,
-            elapsedMs = sw2.ElapsedMilliseconds,
-            memoryUsedBytes = memAfter2 - memBefore2,
-            memoryUsedMB = (memAfter2 - memBefore2) / 1024.0 / 1024.0,
-            note = "Streams entries one by one - memory efficient"
-        };
+            _logger.LogError(ex, "Error comparing memory usage for map {MapName}", mapName);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
 
-        return Ok(new
-        {
-            mapName,
-            comparison = results,
-            recommendation = "Use GetAllEntriesAsync(Action) for large datasets to avoid OutOfMemoryException"
-        });
+    private async Task<int> CompareMemoryUsage_LoadAll<TKey, TValue>(object mapInstance) where TKey : notnull
+    {
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var entries = await map.GetAllEntriesAsync();
+        return entries.Count();
+    }
+
+    private async Task<int> CompareMemoryUsage_Streaming<TKey, TValue>(object mapInstance) where TKey : notnull
+    {
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var count = 0;
+        await map.GetAllEntriesAsync(_ => { count++; });
+        return count;
     }
 
     /// <summary>
@@ -340,101 +338,95 @@ public class StreamTestController : ControllerBase
             return NotFound(new { error = $"Map '{mapName}' not found" });
         }
 
-        var results = new Dictionary<string, object>();
-
-        // Test ContainsKeyAsync
-        var containsMethod = mapInstance.GetType().GetMethod("ContainsKeyAsync");
-        if (containsMethod != null)
+        try
         {
             var keyType = mapInstance.GetType().GetGenericArguments()[0];
-            var testKey = Convert.ChangeType(1, keyType); // Test with key=1
-            var task = containsMethod.Invoke(mapInstance, new[] { testKey }) as Task<bool>;
-            if (task != null)
+            var valueType = mapInstance.GetType().GetGenericArguments()[1];
+
+            var helperMethod = typeof(StreamTestController)
+                .GetMethod(nameof(TestBasicOperationsGeneric), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .MakeGenericMethod(keyType, valueType);
+            
+            var results = await (Task<Dictionary<string, object>>)helperMethod.Invoke(this, new[] { mapInstance })!;
+
+            return Ok(new
             {
-                var exists = await task;
-                results["contains_key_1"] = exists;
-            }
+                mapName,
+                operations = results,
+                note = "All IMap<TKey, TValue> basic operations tested successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error testing basic operations for map {MapName}", mapName);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    private async Task<Dictionary<string, object>> TestBasicOperationsGeneric<TKey, TValue>(object mapInstance) where TKey : notnull
+    {
+        var map = (IMap<TKey, TValue>)mapInstance;
+        var results = new Dictionary<string, object>();
+
+        try
+        {
+            // Test ContainsKeyAsync
+            var testKey = (TKey)Convert.ChangeType(1, typeof(TKey)); // Test with key=1
+            var exists = await map.ContainsKeyAsync(testKey);
+            results["contains_key_1"] = exists;
+        }
+        catch (Exception ex)
+        {
+            results["contains_key_1"] = $"Error: {ex.Message}";
         }
 
-        // Test CountAsync
-        var countMethod = mapInstance.GetType().GetMethod("CountAsync");
-        if (countMethod != null)
+        try
         {
-            var task = countMethod.Invoke(mapInstance, null) as Task<int>;
-            if (task != null)
-            {
-                var count = await task;
-                results["total_count"] = count;
-            }
+            // Test CountAsync
+            var count = await map.CountAsync();
+            results["total_count"] = count;
+        }
+        catch (Exception ex)
+        {
+            results["total_count"] = $"Error: {ex.Message}";
         }
 
-        // Test GetAllKeysAsync
-        var getAllKeysMethod = mapInstance.GetType().GetMethod("GetAllKeysAsync", Type.EmptyTypes);
-        if (getAllKeysMethod != null)
+        try
         {
+            // Test GetAllKeysAsync
             var sw = Stopwatch.StartNew();
-            var task = getAllKeysMethod.Invoke(mapInstance, null) as Task;
-            if (task != null)
+            var keys = await map.GetAllKeysAsync();
+            var keyList = keys.Take(5).Select(k => k?.ToString() ?? "").ToList();
+            sw.Stop();
+            results["get_all_keys"] = new
             {
-                await task;
-                var resultProp = task.GetType().GetProperty("Result");
-                var keys = resultProp?.GetValue(task) as System.Collections.IEnumerable;
-                
-                var keyList = new List<object>();
-                if (keys != null)
-                {
-                    foreach (var key in keys)
-                    {
-                        keyList.Add(key);
-                        if (keyList.Count >= 5) break; // Sample 5
-                    }
-                }
-                
-                sw.Stop();
-                results["get_all_keys"] = new
-                {
-                    elapsed_ms = sw.ElapsedMilliseconds,
-                    sample_keys = keyList.Take(5).ToList()
-                };
-            }
+                elapsed_ms = sw.ElapsedMilliseconds,
+                sample_keys = keyList
+            };
+        }
+        catch (Exception ex)
+        {
+            results["get_all_keys"] = $"Error: {ex.Message}";
         }
 
-        // Test GetAllValuesAsync
-        var getAllValuesMethod = mapInstance.GetType().GetMethod("GetAllValuesAsync", Type.EmptyTypes);
-        if (getAllValuesMethod != null)
+        try
         {
+            // Test GetAllValuesAsync
             var sw = Stopwatch.StartNew();
-            var task = getAllValuesMethod.Invoke(mapInstance, null) as Task;
-            if (task != null)
+            var values = await map.GetAllValuesAsync();
+            var valueList = values.Take(3).ToList();
+            sw.Stop();
+            results["get_all_values"] = new
             {
-                await task;
-                var resultProp = task.GetType().GetProperty("Result");
-                var values = resultProp?.GetValue(task) as System.Collections.IEnumerable;
-                
-                var valueList = new List<object>();
-                if (values != null)
-                {
-                    foreach (var value in values)
-                    {
-                        valueList.Add(value);
-                        if (valueList.Count >= 3) break; // Sample 3
-                    }
-                }
-                
-                sw.Stop();
-                results["get_all_values"] = new
-                {
-                    elapsed_ms = sw.ElapsedMilliseconds,
-                    sample_values = valueList.Take(3).ToList()
-                };
-            }
+                elapsed_ms = sw.ElapsedMilliseconds,
+                sample_values = valueList
+            };
+        }
+        catch (Exception ex)
+        {
+            results["get_all_values"] = $"Error: {ex.Message}";
         }
 
-        return Ok(new
-        {
-            mapName,
-            operations = results,
-            note = "All IMap<TKey, TValue> basic operations tested successfully"
-        });
+        return results;
     }
 }
