@@ -22,7 +22,15 @@ public interface IRegisterBuilder
     /// <typeparam name="Value"></typeparam>
     /// <returns></returns>
     IRegisterBuilder CreateMap<Key, Value>(string mapName) where Key : notnull;
+    IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan expiration) where Key : notnull;
+    
+    /// <summary>
+    /// Tạo map với TTL cho từng phần tử
+    /// </summary>
+    IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan? expiration, TimeSpan? itemTtl) where Key : notnull;
+    
     IRegisterBuilder CreateBucket<Value>(string bucketName);
+    IRegisterBuilder CreateBucket<Value>(string bucketName, TimeSpan expiration);
     void Build();
 }
 
@@ -58,7 +66,35 @@ internal sealed class RegisterBuilder : IRegisterBuilder
 		return this;
 	}
 
+	public IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan expiration) where Key : notnull
+	{
+		_registrations.Add(() => _storage.RegisterMap<Key, Value>(mapName));
+		return this;
+	}
+
+	public IRegisterBuilder CreateMap<Key, Value>(string mapName, TimeSpan? expiration, TimeSpan? itemTtl) where Key : notnull
+	{
+		_registrations.Add(() =>
+		{
+			_storage.RegisterMap<Key, Value>(mapName);
+			
+			// Cấu hình TTL cho từng item nếu có
+			if (itemTtl.HasValue)
+			{
+				var map = _storage.GetMap<Key, Value>(mapName);
+				map.SetItemExpiration(itemTtl);
+			}
+		});
+		return this;
+	}
+
 	public IRegisterBuilder CreateBucket<Value>(string bucketName)
+	{
+		_registrations.Add(() => _storage.RegisterBucket<Value>(bucketName));
+		return this;
+	}
+
+	public IRegisterBuilder CreateBucket<Value>(string bucketName, TimeSpan expiration)
 	{
 		_registrations.Add(() => _storage.RegisterBucket<Value>(bucketName));
 		return this;

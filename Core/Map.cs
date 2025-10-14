@@ -34,6 +34,20 @@ public interface IMap<TKey, TValue>
     /// </summary>
     void OnBatchUpdate(Action<IEnumerable<IEntry<TKey, TValue>>> batchUpdateAction);
 
+    /// <summary>
+    /// Cấu hình TTL (Time To Live) cho từng phần tử trong map
+    /// Nếu một phần tử không có bất kỳ hoạt động nào (Get/Set) trong khoảng thời gian này, nó sẽ tự động bị xóa
+    /// Logic: Dùng Redis Sorted Set phụ để tracking thời gian truy cập cuối cùng
+    /// Background timer sẽ check và xóa các keys hết hạn mỗi giây
+    /// </summary>
+    /// <param name="ttl">Thời gian hết hạn. Nếu null thì tắt TTL</param>
+    void SetItemExpiration(TimeSpan? ttl);
+
+    /// <summary>
+    /// Callback khi một phần tử hết hạn và bị xóa tự động
+    /// </summary>
+    void OnExpired(Action<TKey, TValue> expiredAction);
+
     Task ClearAsync();
 }
 

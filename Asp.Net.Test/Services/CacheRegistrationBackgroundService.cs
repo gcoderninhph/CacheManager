@@ -21,6 +21,14 @@ public class CacheRegistrationBackgroundService : CacheManagerRegistrationServic
         builder.CreateMap<string, string>("user-sessions");
         builder.CreateMap<int, string>("user-data");
         builder.CreateMap<string, UserInfo>("user-info");
+        
+        // Example: Map with TTL - Items expire after 5 minutes of inactivity
+        // Uncommment to enable:
+        // builder.CreateMap<string, string>(
+        //     mapName: "temp-sessions",
+        //     expiration: null,              // Map itself doesn't expire
+        //     itemTtl: TimeSpan.FromMinutes(5) // Items auto-delete after 5 min idle
+        // );
 
         // Register buckets
         builder.CreateBucket<string>("logs");

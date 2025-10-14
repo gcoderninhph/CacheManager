@@ -20,9 +20,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 	private readonly List<Action<TKey, TValue>> _onRemoveHandlers;
 	private readonly List<Action> _onClearHandlers;
 	private readonly List<Action<IEnumerable<IEntry<TKey, TValue>>>> _onBatchUpdateHandlers;
+	private readonly List<Action<TKey, TValue>> _onExpiredHandlers;
 	private readonly Timer? _batchTimer;
+	private Timer? _expirationTimer;
 	private readonly TimeSpan _batchWaitTime;
 	private readonly object _lockObj = new();
+	private TimeSpan? _itemTtl = null; // TTL cho từng phần tử
 	
 	// JSON serialization options - mặc định format đẹp, camelCase
 	private static readonly JsonSerializerOptions JsonOptions = new()
@@ -48,6 +51,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		_onRemoveHandlers = new List<Action<TKey, TValue>>();
 		_onClearHandlers = new List<Action>();
 		_onBatchUpdateHandlers = new List<Action<IEnumerable<IEntry<TKey, TValue>>>>();
+		_onExpiredHandlers = new List<Action<TKey, TValue>>();
 		_batchWaitTime = batchWaitTime ?? TimeSpan.FromSeconds(5);
 
 		if (_onBatchUpdateHandlers.Count > 0)
@@ -68,6 +72,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			throw new KeyNotFoundException($"Key '{key}' not found in map '{_mapName}'");
 		}
 
+		// Update access time nếu có TTL
+		if (_itemTtl.HasValue)
+		{
+			await UpdateAccessTimeAsync(key);
+		}
+
 		return DeserializeValue(value!);
 	}
 
@@ -80,6 +90,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 		var existed = await db.HashExistsAsync(hashKey, fieldName);
 		await db.HashSetAsync(hashKey, fieldName, serializedValue);
+
+		// Update access time nếu có TTL
+		if (_itemTtl.HasValue)
+		{
+			await UpdateAccessTimeAsync(key);
+		}
 
 		// Update version cache
 		var entry = new MapEntry
@@ -142,11 +158,44 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		}
 	}
 
+	public void SetItemExpiration(TimeSpan? ttl)
+	{
+		_itemTtl = ttl;
+		
+		if (ttl.HasValue && _expirationTimer == null)
+		{
+			// Khởi tạo timer để check expiration mỗi giây
+			_expirationTimer = new Timer(ProcessExpiration, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+		}
+		else if (!ttl.HasValue && _expirationTimer != null)
+		{
+			// Tắt timer nếu không còn TTL
+			_expirationTimer.Dispose();
+			_expirationTimer = null;
+		}
+	}
+
+	public void OnExpired(Action<TKey, TValue> expiredAction)
+	{
+		lock (_lockObj)
+		{
+			_onExpiredHandlers.Add(expiredAction);
+		}
+	}
+
 	public async Task ClearAsync()
 	{
 		var db = _redis.GetDatabase(_database);
 		var hashKey = GetHashKey();
 		await db.KeyDeleteAsync(hashKey);
+		
+		// Xóa luôn sorted set tracking access time
+		if (_itemTtl.HasValue)
+		{
+			var accessTimeKey = GetAccessTimeKey();
+			await db.KeyDeleteAsync(accessTimeKey);
+		}
+		
 		_versionCache.Clear();
 		TriggerClearHandlers();
 	}
@@ -174,7 +223,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
-						Value = value?.ToString() ?? "",
+						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
 						Version = version
 					});
 				}
@@ -246,7 +295,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
-						Value = value?.ToString() ?? "",
+						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
 						Version = version
 					});
 					
@@ -311,7 +360,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					matchedEntries.Add(new MapEntryData
 					{
 						Key = keyString,
-						Value = value?.ToString() ?? "",
+						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
 						Version = version
 					});
 				}
@@ -398,6 +447,24 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		}
 	}
 
+	private void TriggerRemoveHandlers(TKey key, TValue value)
+	{
+		lock (_lockObj)
+		{
+			foreach (var handler in _onRemoveHandlers)
+			{
+				try
+				{
+					handler(key, value);
+				}
+				catch
+				{
+					// Ignore handler exceptions
+				}
+			}
+		}
+	}
+
 	private void TriggerClearHandlers()
 	{
 		lock (_lockObj)
@@ -436,12 +503,128 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 	private string GetHashKey() => $"map:{_mapName}";
 
+	private string GetAccessTimeKey() => $"map:{_mapName}:access-time";
+
 	private string SerializeKey(TKey key) => JsonSerializer.Serialize(key, JsonOptions);
 
 	private string SerializeValue(TValue value) => JsonSerializer.Serialize(value, JsonOptions);
 
 	private TValue DeserializeValue(string json) => 
 		JsonSerializer.Deserialize<TValue>(json, JsonOptions) ?? throw new InvalidOperationException("Failed to deserialize value");
+
+	/// <summary>
+	/// Update access time của key trong sorted set
+	/// Score = Unix timestamp (seconds)
+	/// </summary>
+	private async Task UpdateAccessTimeAsync(TKey key)
+	{
+		var db = _redis.GetDatabase(_database);
+		var accessTimeKey = GetAccessTimeKey();
+		var fieldName = SerializeKey(key);
+		var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		
+		await db.SortedSetAddAsync(accessTimeKey, fieldName, now);
+	}
+
+	/// <summary>
+	/// Background task để xóa các keys đã hết hạn
+	/// Chạy mỗi giây
+	/// </summary>
+	private void ProcessExpiration(object? state)
+	{
+		if (!_itemTtl.HasValue)
+		{
+			return;
+		}
+
+		try
+		{
+			var db = _redis.GetDatabase(_database);
+			var accessTimeKey = GetAccessTimeKey();
+			var hashKey = GetHashKey();
+			var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+			var expirationThreshold = now - (long)_itemTtl.Value.TotalSeconds;
+
+			// Lấy tất cả keys có access time < threshold (đã hết hạn)
+			// ZRANGEBYSCORE key -inf threshold
+			var expiredKeys = db.SortedSetRangeByScore(
+				accessTimeKey,
+				double.NegativeInfinity,
+				expirationThreshold
+			);
+
+			if (expiredKeys.Length == 0)
+			{
+				return;
+			}
+
+			// Xóa từng key đã hết hạn
+			foreach (var expiredKeyValue in expiredKeys)
+			{
+				try
+				{
+					var serializedKey = expiredKeyValue.ToString();
+					
+					// Get value trước khi xóa để trigger callback
+					var value = db.HashGet(hashKey, serializedKey);
+					
+					if (value.HasValue)
+					{
+						// Xóa khỏi hash
+						db.HashDelete(hashKey, serializedKey);
+						
+						// Xóa khỏi sorted set
+						db.SortedSetRemove(accessTimeKey, serializedKey);
+						
+						// Deserialize key và value để trigger callback
+						var key = JsonSerializer.Deserialize<TKey>(serializedKey, JsonOptions);
+						if (key != null)
+						{
+							var deserializedValue = DeserializeValue(value!);
+							
+							// Remove from version cache
+							_versionCache.TryRemove(key, out _);
+							
+							// Trigger expired handlers
+							TriggerExpiredHandlers(key, deserializedValue);
+							TriggerRemoveHandlers(key, deserializedValue);
+						}
+					}
+					else
+					{
+						// Key không tồn tại trong hash, xóa khỏi sorted set
+						db.SortedSetRemove(accessTimeKey, serializedKey);
+					}
+				}
+				catch
+				{
+					// Ignore individual key errors
+				}
+			}
+		}
+		catch
+		{
+			// Ignore timer errors
+		}
+	}
+
+	private void TriggerExpiredHandlers(TKey key, TValue value)
+	{
+		lock (_lockObj)
+		{
+			foreach (var handler in _onExpiredHandlers)
+			{
+				try
+				{
+					handler(key, value);
+				}
+				catch
+				{
+					// Ignore handler exceptions
+				}
+			}
+		}
+	}
 
 	private sealed class MapEntry
 	{

@@ -275,6 +275,10 @@ builder.Services.AddCacheManager(options =>
 - **[API_GUIDE.md](API_GUIDE.md)** - Swagger & CRUD API documentation
 - **[DASHBOARD_GUIDE.md](DASHBOARD_GUIDE.md)** - Dashboard usage guide
 - **[PAGINATION_GUIDE.md](PAGINATION_GUIDE.md)** - Pagination & search details
+- **[CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md)** - Configuration from appsettings.json
+- **[USERINFO_API_GUIDE.md](USERINFO_API_GUIDE.md)** - UserInfo CRUD API examples
+- **[JSON_SERIALIZATION_GUIDE.md](JSON_SERIALIZATION_GUIDE.md)** - JSON serialization guide
+- **[TTL_GUIDE.md](TTL_GUIDE.md)** - Item TTL (Time To Live) guide
 
 ## 🏷️ API Endpoints
 
