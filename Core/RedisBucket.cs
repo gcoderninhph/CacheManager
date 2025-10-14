@@ -13,6 +13,15 @@ internal sealed class RedisBucket<TValue>
 	private readonly IConnectionMultiplexer _redis;
 	private readonly string _bucketName;
 	private readonly int _database;
+	
+	// JSON serialization options - mặc định format đẹp, camelCase
+	private static readonly JsonSerializerOptions JsonOptions = new()
+	{
+		WriteIndented = false, // Compact để tiết kiệm bandwidth
+		PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // camelCase cho properties
+		PropertyNameCaseInsensitive = true, // Case-insensitive khi deserialize
+		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+	};
 
 	public RedisBucket(IConnectionMultiplexer redis, string bucketName, int database = -1)
 	{
@@ -25,7 +34,7 @@ internal sealed class RedisBucket<TValue>
 	{
 		var db = _redis.GetDatabase(_database);
 		var listKey = GetListKey();
-		var serializedValue = JsonSerializer.Serialize(value);
+		var serializedValue = JsonSerializer.Serialize(value, JsonOptions);
 		await db.ListRightPushAsync(listKey, serializedValue);
 	}
 
@@ -40,7 +49,7 @@ internal sealed class RedisBucket<TValue>
 			return default;
 		}
 
-		return JsonSerializer.Deserialize<TValue>(value!);
+		return JsonSerializer.Deserialize<TValue>(value!, JsonOptions);
 	}
 
 	public async Task<long> CountAsync()
@@ -55,7 +64,7 @@ internal sealed class RedisBucket<TValue>
 		var db = _redis.GetDatabase(_database);
 		var listKey = GetListKey();
 		var values = await db.ListRangeAsync(listKey);
-		return values.Select(v => JsonSerializer.Deserialize<TValue>(v.ToString())!);
+		return values.Select(v => JsonSerializer.Deserialize<TValue>(v.ToString(), JsonOptions)!);
 	}
 
 	public async Task ClearAsync()

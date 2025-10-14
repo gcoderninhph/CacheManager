@@ -53,6 +53,8 @@ CacheManager/
 ├── DASHBOARD_GUIDE.md            # Dashboard usage guide
 ├── PAGINATION_GUIDE.md           # Pagination & search details
 ├── OPTIMIZATION_GUIDE.md         # Performance optimization guide
+├── USERINFO_API_GUIDE.md         # UserInfo CRUD API reference
+├── JSON_SERIALIZATION_GUIDE.md   # JSON serialization details
 └── README.md                     # This file
 ```
 
@@ -364,6 +366,8 @@ http://localhost:5011/swagger
 |-------|-------------|
 | [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration & Background Service setup |
 | [API_GUIDE.md](API_GUIDE.md) | Swagger UI & CRUD API reference |
+| [USERINFO_API_GUIDE.md](USERINFO_API_GUIDE.md) | UserInfo CRUD API examples |
+| [JSON_SERIALIZATION_GUIDE.md](JSON_SERIALIZATION_GUIDE.md) | JSON serialization & best practices |
 | [DASHBOARD_GUIDE.md](DASHBOARD_GUIDE.md) | Web dashboard usage guide |
 | [PAGINATION_GUIDE.md](PAGINATION_GUIDE.md) | Pagination & search implementation |
 | [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md) | Performance optimization details |

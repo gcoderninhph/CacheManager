@@ -23,6 +23,15 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 	private readonly Timer? _batchTimer;
 	private readonly TimeSpan _batchWaitTime;
 	private readonly object _lockObj = new();
+	
+	// JSON serialization options - mặc định format đẹp, camelCase
+	private static readonly JsonSerializerOptions JsonOptions = new()
+	{
+		WriteIndented = false, // Compact để tiết kiệm bandwidth
+		PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // camelCase cho properties
+		PropertyNameCaseInsensitive = true, // Case-insensitive khi deserialize
+		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+	};
 
 	public RedisMap(
 		IConnectionMultiplexer redis,
@@ -427,12 +436,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 	private string GetHashKey() => $"map:{_mapName}";
 
-	private string SerializeKey(TKey key) => JsonSerializer.Serialize(key);
+	private string SerializeKey(TKey key) => JsonSerializer.Serialize(key, JsonOptions);
 
-	private string SerializeValue(TValue value) => JsonSerializer.Serialize(value);
+	private string SerializeValue(TValue value) => JsonSerializer.Serialize(value, JsonOptions);
 
 	private TValue DeserializeValue(string json) => 
-		JsonSerializer.Deserialize<TValue>(json) ?? throw new InvalidOperationException("Failed to deserialize value");
+		JsonSerializer.Deserialize<TValue>(json, JsonOptions) ?? throw new InvalidOperationException("Failed to deserialize value");
 
 	private sealed class MapEntry
 	{
