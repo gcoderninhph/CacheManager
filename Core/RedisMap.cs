@@ -268,11 +268,17 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
 					
+					// Get timestamp from Redis
+					var timestamp = await GetTimestampFromRedisAsync(key);
+					var timeAgo = FormatTimeAgo(timestamp);
+					
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
 						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
-						Version = version.ToString()
+						Version = version.ToString().Substring(0, 8), // Short version (first 8 chars)
+						LastModified = timeAgo,
+						LastModifiedTicks = timestamp.Ticks
 					});
 				}
 			}
@@ -339,11 +345,17 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
 					
+					// Get timestamp from Redis
+					var timestamp = await GetTimestampFromRedisAsync(key);
+					var timeAgo = FormatTimeAgo(timestamp);
+					
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
 						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
-						Version = version.ToString()
+						Version = version.ToString().Substring(0, 8), // Short version
+						LastModified = timeAgo,
+						LastModifiedTicks = timestamp.Ticks
 					});
 					
 					taken++;
@@ -403,11 +415,17 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
 					
+					// Get timestamp from Redis
+					var timestamp = await GetTimestampFromRedisAsync(key);
+					var timeAgo = FormatTimeAgo(timestamp);
+					
 					matchedEntries.Add(new MapEntryData
 					{
 						Key = keyString,
 						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
-						Version = version.ToString()
+						Version = version.ToString().Substring(0, 8), // Short version
+						LastModified = timeAgo,
+						LastModifiedTicks = timestamp.Ticks
 					});
 				}
 			}
@@ -1161,6 +1179,32 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 	}
 
 	/// <summary>
+	/// Format timestamp to human-readable "time ago" format
+	/// </summary>
+	private string FormatTimeAgo(DateTime timestamp)
+	{
+		var now = DateTime.UtcNow;
+		var diff = now - timestamp;
+		
+		if (diff.TotalSeconds < 60)
+			return $"{(int)diff.TotalSeconds}s ago";
+		
+		if (diff.TotalMinutes < 60)
+			return $"{(int)diff.TotalMinutes}m ago";
+		
+		if (diff.TotalHours < 24)
+			return $"{(int)diff.TotalHours}h ago";
+		
+		if (diff.TotalDays < 30)
+			return $"{(int)diff.TotalDays}d ago";
+		
+		if (diff.TotalDays < 365)
+			return $"{(int)(diff.TotalDays / 30)}mo ago";
+		
+		return $"{(int)(diff.TotalDays / 365)}y ago";
+	}
+
+	/// <summary>
 	/// Get TTL configuration from Redis (in seconds)
 	/// </summary>
 	private async Task<TimeSpan?> GetItemTtlFromRedisAsync()
@@ -1380,6 +1424,8 @@ public class MapEntryData
 	public string Key { get; set; } = string.Empty;
 	public string Value { get; set; } = string.Empty;
 	public string Version { get; set; } = string.Empty;
+	public string LastModified { get; set; } = string.Empty;
+	public long LastModifiedTicks { get; set; }
 }
 
 public class PagedMapEntries

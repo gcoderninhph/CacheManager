@@ -74,7 +74,7 @@
             }
         } catch (error) {
             console.error('Failed to fetch map data:', error);
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--danger);">Error loading map data</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--danger);">Error loading map data</td></tr>';
         }
     };
 
@@ -152,7 +152,7 @@
         tableBody.innerHTML = "";
         
         if (entries.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; opacity: 0.5;">No data in this map</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; opacity: 0.5;">No data in this map</td></tr>';
             return;
         }
 
@@ -161,7 +161,8 @@
             tr.innerHTML = `
                 <td><span class="tag">${entry.key || ''}</span></td>
                 <td>${entry.value || ''}</td>
-                <td><code style="font-size: 0.85em; opacity: 0.7;">${entry.version ? entry.version.substring(0, 8) : 'N/A'}</code></td>
+                <td><span style="color: var(--info); font-size: 0.9em;">${entry.lastModified || 'N/A'}</span></td>
+                <td><code style="font-size: 0.85em; opacity: 0.7;">${entry.version || 'N/A'}</code></td>
             `;
             tableBody.appendChild(tr);
         });
