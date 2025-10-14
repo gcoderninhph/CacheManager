@@ -54,10 +54,8 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		_onExpiredHandlers = new List<Action<TKey, TValue>>();
 		_batchWaitTime = batchWaitTime ?? TimeSpan.FromSeconds(5);
 
-		if (_onBatchUpdateHandlers.Count > 0)
-		{
-			_batchTimer = new Timer(ProcessBatch, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-		}
+		// Always start batch timer - it will check if there are handlers
+		_batchTimer = new Timer(ProcessBatch, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 	}
 
 	public async Task<TValue> GetValueAsync(TKey key)
@@ -393,6 +391,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 	private void ProcessBatch(object? state)
 	{
+		// Skip if no batch handlers registered
+		if (_onBatchUpdateHandlers.Count == 0)
+		{
+			return;
+		}
+
 		var now = DateTime.UtcNow;
 		var batch = new List<IEntry<TKey, TValue>>();
 
