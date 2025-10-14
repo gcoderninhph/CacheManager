@@ -49,8 +49,10 @@ CacheManager/
 │   └── Pages/                    # Razor pages
 │
 ├── API_GUIDE.md                  # Swagger & CRUD API docs
+├── CONFIGURATION_GUIDE.md        # Configuration & Background Service
 ├── DASHBOARD_GUIDE.md            # Dashboard usage guide
 ├── PAGINATION_GUIDE.md           # Pagination & search details
+├── OPTIMIZATION_GUIDE.md         # Performance optimization guide
 └── README.md                     # This file
 ```
 
@@ -103,12 +105,62 @@ http://localhost:5011/test/add-data
 
 ## 📖 Hướng dẫn sử dụng
 
-### Đăng ký Maps & Buckets
+### Cấu hình từ appsettings.json (Recommended)
+
+**appsettings.json:**
+```json
+{
+  "CacheManager": {
+    "RedisConnectionString": "localhost:6379",
+    "RedisDatabase": 0,
+    "BatchWaitTimeSeconds": 5,
+    "DashboardPath": "/cache-manager"
+  }
+}
+```
+
+**Program.cs:**
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Read configuration from appsettings.json
+builder.Services.AddCacheManager(builder.Configuration);
+
+// Register via Background Service
+builder.Services.AddHostedService<CacheRegistrationBackgroundService>();
+
+var app = builder.Build();
+
+// Auto-enable dashboard (reads path from config)
+app.UseCacheManagerDashboard();
+```
+
+**Services/CacheRegistrationBackgroundService.cs:**
+```csharp
+public class CacheRegistrationBackgroundService : CacheManagerRegistrationService
+{
+    public CacheRegistrationBackgroundService(
+        ICacheRegisterService registerService,
+        ILogger<CacheManagerRegistrationService> logger)
+        : base(registerService, logger)
+    {
+    }
+
+    protected override void ConfigureCache(IRegisterBuilder builder)
+    {
+        builder.CreateMap<string, string>("user-sessions");
+        builder.CreateMap<int, string>("user-data");
+        builder.CreateBucket<string>("logs");
+    }
+}
+```
+
+> 📘 **Chi tiết**: Xem [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md)
+
+### Cấu hình thủ công (Legacy)
 
 ```csharp
 // Program.cs
-var builder = WebApplication.CreateBuilder(args);
-
 builder.Services.AddCacheManager(options =>
 {
     options.RedisConnectionString = "localhost:6379";
@@ -118,11 +170,9 @@ builder.Services.AddCacheManager(options =>
 
 var app = builder.Build();
 
-// Register maps và buckets
 var registerService = app.Services.GetRequiredService<ICacheRegisterService>();
 registerService.RegisterBuilder()
     .CreateMap<string, string>("user-sessions")
-    .CreateMap<int, string>("user-data")
     .CreateBucket<string>("logs")
     .Build();
 
@@ -299,11 +349,24 @@ http://localhost:5011/swagger
 
 ## 📊 Performance
 
+- **Optimized Pagination**: HSCAN cursor-based (1,600x faster for large datasets)
+- **Memory Efficient**: 50,000x reduction (200MB → 4KB for 1M records)
 - **Page Size**: 20 records (optimal UX)
 - **Search Debounce**: 300ms (reduce API calls)
-- **Server-side Pagination**: Giảm network traffic
 - **Redis Backend**: High-performance cache
-- **Batch Processing**: 1s check interval, 5s wait time
+- **Batch Processing**: 1s check interval, 5s configurable wait time
+
+> 📘 **Chi tiết**: Xem [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md)
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration & Background Service setup |
+| [API_GUIDE.md](API_GUIDE.md) | Swagger UI & CRUD API reference |
+| [DASHBOARD_GUIDE.md](DASHBOARD_GUIDE.md) | Web dashboard usage guide |
+| [PAGINATION_GUIDE.md](PAGINATION_GUIDE.md) | Pagination & search implementation |
+| [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md) | Performance optimization details |
 
 ## 🎁 Features Roadmap
 

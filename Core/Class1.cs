@@ -42,15 +42,54 @@ public sealed class CacheManagerOptions
 /// </summary>
 public static class CacheManagerServiceCollectionExtensions
 {
-	public static IServiceCollection AddCacheManager(this IServiceCollection services, Action<CacheManagerOptions>? configure = null)
+	/// <summary>
+	/// Add CacheManager services with configuration from appsettings.json
+	/// </summary>
+	public static IServiceCollection AddCacheManager(
+		this IServiceCollection services, 
+		Microsoft.Extensions.Configuration.IConfiguration configuration)
 	{
 		ArgumentNullException.ThrowIfNull(services);
+		ArgumentNullException.ThrowIfNull(configuration);
+
+		// Bind configuration from appsettings.json "CacheManager" section
+		services.Configure<CacheManagerOptions>(
+			configuration.GetSection("CacheManager"));
+
+		services.TryAddSingleton<CacheManagerDashboardResources>();
+		services.TryAddSingleton<ICacheManagerDashboardRenderer, EmbeddedCacheManagerDashboardRenderer>();
+		services.TryAddSingleton<ICacheManagerRedisClient, CacheManagerRedisClient>();
+
+		// Register RedisCacheStorage
+		services.TryAddSingleton<RedisCacheStorage>(sp =>
+		{
+			var options = sp.GetRequiredService<IOptions<CacheManagerOptions>>().Value;
+			var redis = ConnectionMultiplexer.Connect(options.RedisConnectionString ?? "localhost:6379");
+			var batchWaitTime = TimeSpan.FromSeconds(options.BatchWaitTimeSeconds);
+			return new RedisCacheStorage(redis, options.RedisDatabase, batchWaitTime);
+		});
+
+		// Register ICacheStorage
+		services.TryAddSingleton<ICacheStorage>(sp => sp.GetRequiredService<RedisCacheStorage>());
+
+		// Register ICacheRegisterService
+		services.TryAddSingleton<ICacheRegisterService, CacheRegisterService>();
+
+		return services;
+	}
+
+	/// <summary>
+	/// Add CacheManager services with manual configuration (legacy support)
+	/// </summary>
+	public static IServiceCollection AddCacheManager(
+		this IServiceCollection services, 
+		Action<CacheManagerOptions> configure)
+	{
+		ArgumentNullException.ThrowIfNull(services);
+		ArgumentNullException.ThrowIfNull(configure);
 
 		var optionsBuilder = services.AddOptions<CacheManagerOptions>();
-		if (configure is not null)
-		{
-			optionsBuilder.Configure(configure);
-		}
+		optionsBuilder.Configure(configure);
 
 		services.TryAddSingleton<CacheManagerDashboardResources>();
 		services.TryAddSingleton<ICacheManagerDashboardRenderer, EmbeddedCacheManagerDashboardRenderer>();
@@ -80,6 +119,20 @@ public static class CacheManagerServiceCollectionExtensions
 /// </summary>
 public static class CacheManagerApplicationBuilderExtensions
 {
+	/// <summary>
+	/// Enable CacheManager dashboard at the path specified in appsettings.json
+	/// </summary>
+	public static WebApplication UseCacheManagerDashboard(this WebApplication app)
+	{
+		ArgumentNullException.ThrowIfNull(app);
+
+		var options = app.Services.GetRequiredService<IOptions<CacheManagerOptions>>().Value;
+		return app.CacheManagerView(options.DashboardPath);
+	}
+
+	/// <summary>
+	/// Enable CacheManager dashboard at a custom path (overrides appsettings.json)
+	/// </summary>
 	public static WebApplication CacheManagerView(this WebApplication app, string? requestPath = null)
 	{
 		ArgumentNullException.ThrowIfNull(app);

@@ -1,5 +1,7 @@
 using CacheManager;
 using CacheManager.Core;
+using Asp.Net.Test.Services;
+using Asp.Net.Test.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,23 +15,13 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "CacheManager API", Version = "v1" });
 });
 
-// Add CacheManager
-builder.Services.AddCacheManager(options =>
-{
-	options.RedisConnectionString = "localhost:6379";
-	options.RedisDatabase = 0;
-	options.BatchWaitTimeSeconds = 5;
-});
+// Add CacheManager from appsettings.json
+builder.Services.AddCacheManager(builder.Configuration);
+
+// Register background service for cache registration
+builder.Services.AddHostedService<CacheRegistrationBackgroundService>();
 
 var app = builder.Build();
-
-// Register maps and buckets
-var registerService = app.Services.GetRequiredService<ICacheRegisterService>();
-registerService.RegisterBuilder()
-	.CreateMap<string, string>("user-sessions")
-	.CreateMap<int, string>("user-data")
-	.CreateBucket<string>("logs")
-	.Build();
 
 // Configure Swagger
 if (app.Environment.IsDevelopment())
@@ -52,7 +44,8 @@ app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthorization();
 
-app.CacheManagerView("/cache-manager");
+// Enable CacheManager Dashboard from appsettings.json
+app.UseCacheManagerDashboard();
 
 // ==================== CRUD API for Map ====================
 
@@ -201,6 +194,177 @@ app.MapGet("/api/map/{mapName}", async (string mapName, ICacheStorage storage, i
 .WithTags("Map CRUD")
 .WithOpenApi();
 
+// ==================== CRUD API for UserInfo ====================
+
+/// <summary>
+/// Get a user by userId
+/// </summary>
+app.MapGet("/api/userinfo/{userId}", async (string userId, ICacheStorage storage) =>
+{
+    try
+    {
+        var map = storage.GetMap<string, UserInfo>("user-info");
+        var userInfo = await map.GetValueAsync(userId);
+        return Results.Ok(userInfo);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = $"User '{userId}' not found" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("GetUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
+/// <summary>
+/// Create or update a user
+/// </summary>
+app.MapPost("/api/userinfo", async (UserInfo userInfo, ICacheStorage storage) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(userInfo.UserId))
+        {
+            return Results.BadRequest(new { error = "UserId is required" });
+        }
+
+        var map = storage.GetMap<string, UserInfo>("user-info");
+        await map.SetValueAsync(userInfo.UserId, userInfo);
+        return Results.Ok(new { message = "User created/updated successfully", userInfo });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("CreateOrUpdateUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
+/// <summary>
+/// Update a user
+/// </summary>
+app.MapPut("/api/userinfo/{userId}", async (string userId, UserInfo userInfo, ICacheStorage storage) =>
+{
+    try
+    {
+        var map = storage.GetMap<string, UserInfo>("user-info");
+        
+        // Check if user exists
+        try
+        {
+            await map.GetValueAsync(userId);
+        }
+        catch (KeyNotFoundException)
+        {
+            return Results.NotFound(new { error = $"User '{userId}' not found" });
+        }
+
+        // Update user
+        userInfo.UserId = userId; // Ensure userId matches route
+        await map.SetValueAsync(userId, userInfo);
+        return Results.Ok(new { message = "User updated successfully", userInfo });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("UpdateUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
+/// <summary>
+/// Delete a user
+/// </summary>
+app.MapDelete("/api/userinfo/{userId}", async (string userId, ICacheStorage storage) =>
+{
+    try
+    {
+        // Note: IMap doesn't have RemoveAsync, only ClearAsync
+        // For individual deletion, we need to use Redis directly or use a workaround
+        // For now, return NotImplemented
+        return Results.Json(new 
+        { 
+            error = "Individual user deletion not supported",
+            message = "Use DELETE /api/userinfo to clear all users, or implement custom Redis delete"
+        }, statusCode: 501);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("DeleteUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
+/// <summary>
+/// Get all users (with pagination)
+/// </summary>
+app.MapGet("/api/userinfo", async (ICacheStorage storage, int page = 1, int pageSize = 20) =>
+{
+    try
+    {
+        var mapInstance = storage.GetMapInstance("user-info");
+        if (mapInstance == null)
+        {
+            return Results.NotFound(new { error = "UserInfo map not found" });
+        }
+
+        var method = mapInstance.GetType().GetMethod("GetEntriesPagedAsync");
+        if (method != null)
+        {
+            var task = method.Invoke(mapInstance, new object[] { page, pageSize, null! }) as Task;
+            if (task != null)
+            {
+                await task.ConfigureAwait(false);
+                var resultProperty = task.GetType().GetProperty("Result");
+                var pagedResult = resultProperty?.GetValue(task);
+                
+                return Results.Ok(new 
+                { 
+                    mapName = "user-info",
+                    data = pagedResult
+                });
+            }
+        }
+        
+        return Results.Problem("Unable to retrieve user data");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("GetAllUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
+/// <summary>
+/// Clear all users
+/// </summary>
+app.MapDelete("/api/userinfo", async (ICacheStorage storage) =>
+{
+    try
+    {
+        var map = storage.GetMap<string, UserInfo>("user-info");
+        await map.ClearAsync();
+        return Results.Ok(new { message = "All users cleared successfully" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+})
+.WithName("ClearAllUserInfo")
+.WithTags("UserInfo CRUD")
+.WithOpenApi();
+
 // ==================== Test Data Endpoint ====================
 
 /// <summary>
@@ -222,7 +386,24 @@ app.MapGet("/test/add-data", async (ICacheStorage storage) =>
         await userData.SetValueAsync(i, $"{{\"name\":\"User{i}\",\"email\":\"user{i}@example.com\"}}");
     }
     
-    return Results.Json(new { success = true, message = "50 user-sessions and 30 user-data records added!" });
+    // Add UserInfo test data
+    var userInfoMap = storage.GetMap<string, UserInfo>("user-info");
+    var names = new[] { "Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack" };
+    for (int i = 1; i <= 25; i++)
+    {
+        await userInfoMap.SetValueAsync($"user-{i:000}", new UserInfo
+        {
+            UserId = $"user-{i:000}",
+            Name = names[(i - 1) % names.Length] + i,
+            Age = 20 + (i % 50)
+        });
+    }
+    
+    return Results.Json(new 
+    { 
+        success = true, 
+        message = "Test data added: 50 user-sessions, 30 user-data, 25 user-info!" 
+    });
 })
 .WithName("AddTestData")
 .WithTags("Testing")
