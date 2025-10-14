@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CacheManager</RootNamespace>
+    <AssemblyName>CacheManager</AssemblyName>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Dashboard\index.html">
+      <LogicalName>Dashboard/index.html</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Dashboard\styles.css">
+      <LogicalName>Dashboard/styles.css</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Dashboard\app.js">
+      <LogicalName>Dashboard/app.js</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

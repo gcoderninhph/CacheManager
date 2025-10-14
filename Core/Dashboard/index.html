@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CacheManager Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <div class="dashboard">
+        <aside class="navigation">
+            <div class="brand">
+                <span class="logo">CM</span>
+                <div>
+                    <h1>CacheManager</h1>
+                    <p>Redis Monitor</p>
+                </div>
+            </div>
+            <nav class="nav-tabs" id="nav-tabs">
+                <button class="tab active" data-tab="map">Map</button>
+                <button class="tab" data-tab="bucket">Bucket</button>
+                <button class="tab" data-tab="events">Pub/Sub</button>
+                <button class="tab" data-tab="settings">Settings</button>
+            </nav>
+            <section class="nav-content" id="nav-content">
+                <h2>Map Overview</h2>
+                <p>Select a map to view its data.</p>
+                <ul id="nav-list" class="nav-list"></ul>
+            </section>
+        </aside>
+        <main class="content">
+            <header class="content-header">
+                <div>
+                    <h2 id="content-title">Hash Snapshot</h2>
+                    <p id="content-subtitle">Showing the latest inspected map.</p>
+                </div>
+                <div class="actions">
+                    <input type="text" id="search-box" placeholder="Search by key..." />
+                    <button id="refresh" type="button">Refresh</button>
+                </div>
+            </header>
+            <section class="content-body">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Value</th>
+                            <th>Version</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cache-table"></tbody>
+                </table>
+                <div class="pagination" id="pagination">
+                    <button id="prev-page" disabled>← Previous</button>
+                    <span id="page-info">Page 1 of 1</span>
+                    <button id="next-page" disabled>Next →</button>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
