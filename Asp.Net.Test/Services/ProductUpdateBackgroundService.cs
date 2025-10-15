@@ -32,7 +32,7 @@ public class ProductUpdateBackgroundService : BackgroundService
         var storage = scope.ServiceProvider.GetRequiredService<ICacheStorage>();
 
         // Get products map
-        var productsMap = await storage.GetOrCreateMapAsync<int, Product>("products");
+        var productsMap = storage.GetOrCreateMap<int, Product>("products");
 
         // Setup batch update listener
         productsMap.OnBatchUpdate(entries =>

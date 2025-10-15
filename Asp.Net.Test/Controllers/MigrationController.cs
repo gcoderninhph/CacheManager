@@ -22,7 +22,7 @@ public class MigrationController : ControllerBase
 	{
 		try
 		{
-			var mapNames = await _cacheStorage.GetAllMapNames();
+			var mapNames = _cacheStorage.GetAllMapNames();
 			var results = new List<object>();
 
 			Console.WriteLine($"[MIGRATION] Starting migration for {mapNames.Count()} maps");
@@ -180,7 +180,7 @@ public class MigrationController : ControllerBase
 	{
 		try
 		{
-			var mapNames = await _cacheStorage.GetAllMapNames();
+			var mapNames = _cacheStorage.GetAllMapNames();
 			var results = new List<object>();
 
 			foreach (var mapName in mapNames)

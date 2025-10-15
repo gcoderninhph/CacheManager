@@ -14,8 +14,8 @@ namespace CacheManager.Core;
 /// </summary>
 public interface ICacheStorage
 {
-	Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull;
-	Task<IEnumerable<string>> GetAllMapNames();
+	IMap<TKey, TValue> GetOrCreateMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull;
+	IEnumerable<string> GetAllMapNames();
 	IEnumerable<string> GetAllBucketNames();
 	object? GetMapInstance(string mapName);
 }
@@ -41,7 +41,7 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		_batchWaitTime = batchWaitTime ?? TimeSpan.FromSeconds(5);
 	}
 
-	public async Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull
+	public IMap<TKey, TValue> GetOrCreateMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull
 	{
 		if (_maps.TryGetValue(mapName, out var existing))
 		{
@@ -59,11 +59,11 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		throw new InvalidOperationException($"Failed to create map '{mapName}'");
 	}
 
-	public async Task<IEnumerable<string>> GetAllMapNames()
+	public IEnumerable<string> GetAllMapNames()
 	{
-		return await Task.FromResult(_maps.Keys
+		return _maps.Keys
 			.Where(name => !name.Contains(":__meta:")) // ✅ Filter out internal metadata keys
-			.ToList());
+			.ToList();
 	}
 
 	public IEnumerable<string> GetAllBucketNames() => _buckets.Keys.ToList();

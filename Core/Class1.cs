@@ -135,9 +135,9 @@ public static class CacheManagerApplicationBuilderExtensions
 		var normalizedPath = NormalizePath(requestPath ?? options.DashboardPath);
 
 		// API endpoint to get all maps and buckets
-		app.MapGet($"{normalizedPath}/api/registry", async (ICacheStorage storage) =>
+		app.MapGet($"{normalizedPath}/api/registry", (ICacheStorage storage) =>
 		{
-			var maps = await storage.GetAllMapNames();
+			var maps = storage.GetAllMapNames();
 			var buckets = storage.GetAllBucketNames();
 			return Results.Json(new { maps, buckets });
 		});

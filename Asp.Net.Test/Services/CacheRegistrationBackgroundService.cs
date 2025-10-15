@@ -26,16 +26,16 @@ public class CacheRegistrationBackgroundService : BackgroundService
         {
             _logger.LogInformation("Starting CacheManager initialization...");
 
-            // Initialize maps with GetOrCreateMapAsync
-            await _storage.GetOrCreateMapAsync<string, string>("user-sessions");
-            await _storage.GetOrCreateMapAsync<int, string>("user-data");
-            await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
+            // Initialize maps with GetOrCreateMap
+            _storage.GetOrCreateMap<string, string>("user-sessions");
+            _storage.GetOrCreateMap<int, string>("user-data");
+            _storage.GetOrCreateMap<string, UserInfo>("user-info");
             
             // TTL Test: Temp sessions expire after 2 minutes of inactivity
-            await _storage.GetOrCreateMapAsync<string, TempSession>("temp-sessions", TimeSpan.FromMinutes(2));
+            _storage.GetOrCreateMap<string, TempSession>("temp-sessions", TimeSpan.FromMinutes(2));
             
             // Batch Update Test: Products with 5-second batch wait time (default)
-            await _storage.GetOrCreateMapAsync<int, Product>("products");
+            _storage.GetOrCreateMap<int, Product>("products");
 
             _logger.LogInformation("CacheManager initialization completed successfully");
         }
