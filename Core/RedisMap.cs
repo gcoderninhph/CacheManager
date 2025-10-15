@@ -101,7 +101,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		}
 	}
 
-	public async Task<TValue> GetValueAsync(TKey key)
+	public async Task<TValue?> GetValueAsync(TKey key)
 	{
 		var db = _redis.GetDatabase(_database);
 		var hashKey = GetHashKey();
@@ -110,7 +110,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 		if (!value.HasValue)
 		{
-			throw new KeyNotFoundException($"Key '{key}' not found in map '{_mapName}'");
+			return default(TValue); // Return null instead of throwing exception
 		}
 
 		// Update access time nếu có TTL
@@ -785,13 +785,11 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 				if (key != null)
 				{
 					var value = await GetValueAsync(key);
-					batch.Add(new Entry<TKey, TValue>(key, value));
+					if (value != null) // Check null instead of catching exception
+					{
+						batch.Add(new Entry<TKey, TValue>(key, value));
+					}
 				}
-			}
-			catch (KeyNotFoundException)
-			{
-				// Key was deleted, skip it
-				continue;
 			}
 			catch
 			{
@@ -824,15 +822,10 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			// Check if item was updated AFTER last batch AND enough time has passed
 			if (kvp.Value > lastBatchProcessed && now - kvp.Value >= _batchWaitTime)
 			{
-				try
+				var value = await GetValueAsync(kvp.Key);
+				if (value != null) // Check null instead of catching exception
 				{
-					var value = await GetValueAsync(kvp.Key);
 					batch.Add(new Entry<TKey, TValue>(kvp.Key, value));
-				}
-				catch (KeyNotFoundException)
-				{
-					// Key was deleted, skip it
-					continue;
 				}
 			}
 		}

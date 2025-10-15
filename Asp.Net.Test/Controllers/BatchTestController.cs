@@ -67,17 +67,15 @@ public class BatchTestController : ControllerBase
     [HttpGet("products/{productId}")]
     public async Task<IActionResult> GetProduct(int productId)
     {
-        try
-        {
-            var productsMap = _storage.GetOrCreateMap<int, Product>("products");
-            var product = await productsMap.GetValueAsync(productId);
-
-            return Ok(product);
-        }
-        catch (KeyNotFoundException)
+        var productsMap = _storage.GetOrCreateMap<int, Product>("products");
+        var product = await productsMap.GetValueAsync(productId);
+        
+        if (product == null)
         {
             return NotFound(new { error = $"Product {productId} not found" });
         }
+
+        return Ok(product);
     }
 
     /// <summary>
@@ -99,23 +97,22 @@ public class BatchTestController : ControllerBase
 
         foreach (var productId in randomIds)
         {
-            try
-            {
-                var product = await productsMap.GetValueAsync(productId);
-
-                // Update product
-                product.Price = (decimal)(random.NextDouble() * 100 + 10);
-                product.Stock = random.Next(0, 1000);
-                product.LastUpdated = DateTime.UtcNow;
-                product.UpdateCount++;
-
-                await productsMap.SetValueAsync(productId, product);
-                updated.Add(product);
-            }
-            catch (KeyNotFoundException)
+            var product = await productsMap.GetValueAsync(productId);
+            
+            if (product == null)
             {
                 _logger.LogWarning($"Product {productId} not found");
+                continue;
             }
+
+            // Update product
+            product.Price = (decimal)(random.NextDouble() * 100 + 10);
+            product.Stock = random.Next(0, 1000);
+            product.LastUpdated = DateTime.UtcNow;
+            product.UpdateCount++;
+
+            await productsMap.SetValueAsync(productId, product);
+            updated.Add(product);
         }
 
         return Ok(new

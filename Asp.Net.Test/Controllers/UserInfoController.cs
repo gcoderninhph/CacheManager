@@ -30,11 +30,13 @@ public class UserInfoController : ControllerBase
         {
             var map = _storage.GetOrCreateMap<string, UserInfo>("user-info");
             var userInfo = await map.GetValueAsync(userId);
+            
+            if (userInfo == null)
+            {
+                return NotFound(new { error = $"User '{userId}' not found" });
+            }
+            
             return Ok(userInfo);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { error = $"User '{userId}' not found" });
         }
         catch (Exception ex)
         {
@@ -76,11 +78,8 @@ public class UserInfoController : ControllerBase
             var map = _storage.GetOrCreateMap<string, UserInfo>("user-info");
             
             // Check if user exists
-            try
-            {
-                await map.GetValueAsync(userId);
-            }
-            catch (KeyNotFoundException)
+            var existingUser = await map.GetValueAsync(userId);
+            if (existingUser == null)
             {
                 return NotFound(new { error = $"User '{userId}' not found" });
             }

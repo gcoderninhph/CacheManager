@@ -78,34 +78,32 @@ public class TtlTestController : ControllerBase
     [HttpGet("access-session/{sessionId}")]
     public async Task<IActionResult> AccessSession(string sessionId)
     {
-        try
-        {
-            var sessionsMap = _storage.GetOrCreateMap<string, TempSession>("temp-sessions");
-            var session = await sessionsMap.GetValueAsync(sessionId);
-
-            // Update last access time
-            session.LastAccessAt = DateTime.UtcNow;
-            await sessionsMap.SetValueAsync(sessionId, session);
-
-            return Ok(new
-            {
-                message = "Session accessed successfully. TTL reset to 2 minutes.",
-                session,
-                ttlInfo = new
-                {
-                    resetAt = DateTime.UtcNow,
-                    willExpireAt = DateTime.UtcNow.AddMinutes(2),
-                    note = "If no access for 2 minutes, session will be deleted"
-                }
-            });
-        }
-        catch (KeyNotFoundException)
+        var sessionsMap = _storage.GetOrCreateMap<string, TempSession>("temp-sessions");
+        var session = await sessionsMap.GetValueAsync(sessionId);
+        
+        if (session == null)
         {
             return NotFound(new
             {
                 error = $"Session '{sessionId}' not found or already expired"
             });
         }
+
+        // Update last access time
+        session.LastAccessAt = DateTime.UtcNow;
+        await sessionsMap.SetValueAsync(sessionId, session);
+
+        return Ok(new
+        {
+            message = "Session accessed successfully. TTL reset to 2 minutes.",
+            session,
+            ttlInfo = new
+            {
+                resetAt = DateTime.UtcNow,
+                willExpireAt = DateTime.UtcNow.AddMinutes(2),
+                note = "If no access for 2 minutes, session will be deleted"
+            }
+        });
     }
 
     /// <summary>

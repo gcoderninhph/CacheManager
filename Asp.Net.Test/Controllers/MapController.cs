@@ -29,11 +29,13 @@ public class MapController : ControllerBase
         {
             var map = _storage.GetOrCreateMap<string, string>(mapName);
             var value = await map.GetValueAsync(key);
+            
+            if (value == null)
+            {
+                return NotFound(new { error = $"Key '{key}' not found in map '{mapName}'" });
+            }
+            
             return Ok(new { key, value });
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { error = $"Key '{key}' not found in map '{mapName}'" });
         }
         catch (Exception ex)
         {

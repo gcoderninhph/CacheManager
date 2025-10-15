@@ -7,10 +7,9 @@ namespace CacheManager.Core;
 public interface IMap<TKey, TValue>
 {
     /// <summary>
-    /// Lấy giá trị từ map theo key, nếu key không tồn tại thì ném ra ngoại lệ KeyNotFoundException
-    /// <exception cref="KeyNotFoundException"></exception>
+    /// Lấy giá trị từ map theo key, trả về null nếu key không tồn tại
     /// </summary>
-    Task<TValue> GetValueAsync(TKey key);
+    Task<TValue?> GetValueAsync(TKey key);
     /// <summary>
     /// Set giá trị cho key, nếu key đã tồn tại thì cập nhật giá trị mới
     /// </summary>
