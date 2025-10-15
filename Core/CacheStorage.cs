@@ -14,8 +14,7 @@ namespace CacheManager.Core;
 /// </summary>
 public interface ICacheStorage
 {
-	IMap<TKey, TValue> GetMap<TKey, TValue>(string mapName) where TKey : notnull;
-	Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName) where TKey : notnull;
+	Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull;
 	Task<IEnumerable<string>> GetAllMapNames();
 	IEnumerable<string> GetAllBucketNames();
 	object? GetMapInstance(string mapName);
@@ -42,17 +41,7 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		_batchWaitTime = batchWaitTime ?? TimeSpan.FromSeconds(5);
 	}
 
-	public IMap<TKey, TValue> GetMap<TKey, TValue>(string mapName) where TKey : notnull
-	{
-		if (_maps.TryGetValue(mapName, out var existing))
-		{
-			return (IMap<TKey, TValue>)existing;
-		}
-
-		throw new KeyNotFoundException($"Map '{mapName}' not found. Please register it first.");
-	}
-
-	public async Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName) where TKey : notnull
+	public async Task<IMap<TKey, TValue>> GetOrCreateMapAsync<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull
 	{
 		if (_maps.TryGetValue(mapName, out var existing))
 		{
@@ -60,8 +49,14 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		}
 
 		// Create new map if not exists
-		RegisterMap<TKey, TValue>(mapName);
-		return await Task.FromResult(GetMap<TKey, TValue>(mapName));
+		RegisterMap<TKey, TValue>(mapName, itemTtl);
+		
+		if (_maps.TryGetValue(mapName, out var created))
+		{
+			return (IMap<TKey, TValue>)created;
+		}
+		
+		throw new InvalidOperationException($"Failed to create map '{mapName}'");
 	}
 
 	public async Task<IEnumerable<string>> GetAllMapNames()
@@ -79,7 +74,7 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		return map;
 	}
 
-	internal void RegisterMap<TKey, TValue>(string mapName) where TKey : notnull
+	internal void RegisterMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull
 	{
 		if (_maps.ContainsKey(mapName))
 		{
@@ -87,6 +82,13 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		}
 
 		var map = new RedisMap<TKey, TValue>(_redis, mapName, _database, _batchWaitTime);
+		
+		// Set TTL if specified
+		if (itemTtl.HasValue)
+		{
+			map.SetItemExpiration(itemTtl);
+		}
+		
 		_maps.TryAdd(mapName, map);
 		_mapTypes.TryAdd(mapName, typeof(IMap<TKey, TValue>));
 	}

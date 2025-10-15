@@ -27,7 +27,7 @@ public class TtlTestController : ControllerBase
     [HttpPost("create-sessions")]
     public async Task<IActionResult> CreateTestSessions([FromQuery] int count = 10)
     {
-        var sessionsMap = _storage.GetMap<string, TempSession>("temp-sessions");
+        var sessionsMap = await _storage.GetOrCreateMapAsync<string, TempSession>("temp-sessions");
 
         // Setup expiration listener
         sessionsMap.OnExpired((sessionId, session) =>
@@ -80,7 +80,7 @@ public class TtlTestController : ControllerBase
     {
         try
         {
-            var sessionsMap = _storage.GetMap<string, TempSession>("temp-sessions");
+            var sessionsMap = await _storage.GetOrCreateMapAsync<string, TempSession>("temp-sessions");
             var session = await sessionsMap.GetValueAsync(sessionId);
 
             // Update last access time
@@ -152,7 +152,7 @@ public class TtlTestController : ControllerBase
     [HttpDelete("sessions")]
     public async Task<IActionResult> ClearSessions()
     {
-        var sessionsMap = _storage.GetMap<string, TempSession>("temp-sessions");
+        var sessionsMap = await _storage.GetOrCreateMapAsync<string, TempSession>("temp-sessions");
         await sessionsMap.ClearAsync();
 
         return Ok(new { message = "All test sessions cleared" });

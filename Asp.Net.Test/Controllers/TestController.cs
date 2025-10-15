@@ -26,7 +26,7 @@ public class TestController : ControllerBase
     [HttpGet("add-data")]
     public async Task<IActionResult> AddTestData()
     {
-        var userSessions = _storage.GetMap<string, string>("user-sessions");
+        var userSessions = await _storage.GetOrCreateMapAsync<string, string>("user-sessions");
         
         // Add more than 20 records to test pagination
         for (int i = 1; i <= 50; i++)
@@ -34,14 +34,14 @@ public class TestController : ControllerBase
             await userSessions.SetValueAsync($"user{i}", $"session-token-{Guid.NewGuid().ToString().Substring(0, 8)}");
         }
         
-        var userData = _storage.GetMap<int, string>("user-data");
+        var userData = await _storage.GetOrCreateMapAsync<int, string>("user-data");
         for (int i = 1; i <= 30; i++)
         {
             await userData.SetValueAsync(i, $"{{\"name\":\"User{i}\",\"email\":\"user{i}@example.com\"}}");
         }
         
         // Add UserInfo test data
-        var userInfoMap = _storage.GetMap<string, UserInfo>("user-info");
+        var userInfoMap = await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
         var names = new[] { "Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack" };
         for (int i = 1; i <= 25; i++)
         {
@@ -85,11 +85,11 @@ public class TestController : ControllerBase
     /// Set TTL for a map (to test Redis TTL storage)
     /// </summary>
     [HttpGet("set-map-ttl")]
-    public IActionResult SetMapTtl([FromQuery] string mapName, [FromQuery] int ttlMinutes)
+    public async Task<IActionResult> SetMapTtl([FromQuery] string mapName, [FromQuery] int ttlMinutes)
     {
         try
         {
-            var map = _storage.GetMap<string, string>(mapName);
+            var map = await _storage.GetOrCreateMapAsync<string, string>(mapName);
             map.SetItemExpiration(TimeSpan.FromMinutes(ttlMinutes));
             
             return Ok(new 

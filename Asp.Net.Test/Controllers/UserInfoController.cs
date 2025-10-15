@@ -28,7 +28,7 @@ public class UserInfoController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, UserInfo>("user-info");
+            var map = await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
             var userInfo = await map.GetValueAsync(userId);
             return Ok(userInfo);
         }
@@ -55,7 +55,7 @@ public class UserInfoController : ControllerBase
                 return BadRequest(new { error = "UserId is required" });
             }
 
-            var map = _storage.GetMap<string, UserInfo>("user-info");
+            var map = await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
             await map.SetValueAsync(userInfo.UserId, userInfo);
             return Ok(new { message = "User created/updated successfully", userInfo });
         }
@@ -73,7 +73,7 @@ public class UserInfoController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, UserInfo>("user-info");
+            var map = await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
             
             // Check if user exists
             try
@@ -167,7 +167,7 @@ public class UserInfoController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, UserInfo>("user-info");
+            var map = await _storage.GetOrCreateMapAsync<string, UserInfo>("user-info");
             await map.ClearAsync();
             return Ok(new { message = "All users cleared successfully" });
         }

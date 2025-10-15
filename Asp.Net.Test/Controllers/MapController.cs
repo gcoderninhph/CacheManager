@@ -27,7 +27,7 @@ public class MapController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, string>(mapName);
+            var map = await _storage.GetOrCreateMapAsync<string, string>(mapName);
             var value = await map.GetValueAsync(key);
             return Ok(new { key, value });
         }
@@ -49,7 +49,7 @@ public class MapController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, string>(mapName);
+            var map = await _storage.GetOrCreateMapAsync<string, string>(mapName);
             await map.SetValueAsync(key, value);
             return Ok(new { message = "Value set successfully", key, value });
         }
@@ -67,7 +67,7 @@ public class MapController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, string>(mapName);
+            var map = await _storage.GetOrCreateMapAsync<string, string>(mapName);
             await map.SetValueAsync(key, value);
             return Ok(new { message = "Value updated successfully", key, value });
         }
@@ -85,7 +85,7 @@ public class MapController : ControllerBase
     {
         try
         {
-            var map = _storage.GetMap<string, string>(mapName);
+            var map = await _storage.GetOrCreateMapAsync<string, string>(mapName);
             await map.ClearAsync();
             return Ok(new { message = $"Map '{mapName}' cleared successfully" });
         }

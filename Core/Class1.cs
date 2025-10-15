@@ -72,9 +72,6 @@ public static class CacheManagerServiceCollectionExtensions
 		// Register ICacheStorage
 		services.TryAddSingleton<ICacheStorage>(sp => sp.GetRequiredService<RedisCacheStorage>());
 
-		// Register ICacheRegisterService
-		services.TryAddSingleton<ICacheRegisterService, CacheRegisterService>();
-
 		return services;
 	}
 
@@ -106,9 +103,6 @@ public static class CacheManagerServiceCollectionExtensions
 
 		// Register ICacheStorage
 		services.TryAddSingleton<ICacheStorage>(sp => sp.GetRequiredService<RedisCacheStorage>());
-
-		// Register ICacheRegisterService
-		services.TryAddSingleton<ICacheRegisterService, CacheRegisterService>();
 
 		return services;
 	}

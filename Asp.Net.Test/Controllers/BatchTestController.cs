@@ -69,7 +69,7 @@ public class BatchTestController : ControllerBase
     {
         try
         {
-            var productsMap = _storage.GetMap<int, Product>("products");
+            var productsMap = await _storage.GetOrCreateMapAsync<int, Product>("products");
             var product = await productsMap.GetValueAsync(productId);
 
             return Ok(product);
@@ -86,7 +86,7 @@ public class BatchTestController : ControllerBase
     [HttpPost("update-products")]
     public async Task<IActionResult> UpdateProducts([FromQuery] int count = 5)
     {
-        var productsMap = _storage.GetMap<int, Product>("products");
+        var productsMap = await _storage.GetOrCreateMapAsync<int, Product>("products");
         var random = new Random();
 
         // Select random product IDs
