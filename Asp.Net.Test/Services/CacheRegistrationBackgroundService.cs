@@ -23,11 +23,7 @@ public class CacheRegistrationBackgroundService : CacheManagerRegistrationServic
         builder.CreateMap<string, UserInfo>("user-info");
         
         // TTL Test: Temp sessions expire after 2 minutes of inactivity
-        builder.CreateMap<string, TempSession>(
-            mapName: "temp-sessions",
-            expiration: null,
-            itemTtl: TimeSpan.FromMinutes(2)
-        );
+        builder.CreateMap<string, TempSession>("temp-sessions", TimeSpan.FromMinutes(2));
         
         // Batch Update Test: Products with 5-second batch wait time (default)
         builder.CreateMap<int, Product>("products");
