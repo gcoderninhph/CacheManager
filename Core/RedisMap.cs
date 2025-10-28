@@ -228,6 +228,19 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 	public async Task ClearAsync()
 	{
+		// Trigger OnRemove cho từng item trước khi xóa (streaming để tránh cache quá nhiều)
+		try
+		{
+			await GetAllEntriesAsync(entry =>
+			{
+				TriggerRemoveHandlers(entry.GetKey(), entry.GetValue());
+			});
+		}
+		catch
+		{
+			// Ignore errors when getting entries (map might be empty)
+		}
+		
 		var db = _redis.GetDatabase(_database);
 		var hashKey = GetHashKey();
 		await db.KeyDeleteAsync(hashKey);
