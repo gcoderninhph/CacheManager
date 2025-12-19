@@ -43,7 +43,8 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		WriteIndented = false, // Compact để tiết kiệm bandwidth
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // camelCase cho properties
 		PropertyNameCaseInsensitive = true, // Case-insensitive khi deserialize
-		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+		IncludeFields = true // Bao gồm cả fields khi serialize/deserialize
 	};
 
 	public RedisMap(
