@@ -20,7 +20,8 @@ internal sealed class RedisBucket<TValue>
 		WriteIndented = false, // Compact để tiết kiệm bandwidth
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // camelCase cho properties
 		PropertyNameCaseInsensitive = true, // Case-insensitive khi deserialize
-		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+		IncludeFields = true // Bao gồm cả fields khi serialize/deserialize
 	};
 
 	public RedisBucket(IConnectionMultiplexer redis, string bucketName, int database = -1)
