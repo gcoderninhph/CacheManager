@@ -35,6 +35,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 	private readonly Timer? _batchTimer;
 	private Timer? _expirationTimer;
 	private readonly TimeSpan _batchWaitTime;
+	private readonly IRedisValueFormatter<TValue> _valueFormatter;
 	private readonly object _lockObj = new();
 	
 	// JSON serialization options - mặc định format đẹp, camelCase
@@ -51,7 +52,8 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		IConnectionMultiplexer redis,
 		string mapName,
 		int database = -1,
-		TimeSpan? batchWaitTime = null)
+		TimeSpan? batchWaitTime = null,
+		IRedisValueFormatter<TValue>? valueFormatter = null)
 	{
 		_redis = redis;
 		_mapName = mapName;
@@ -69,6 +71,7 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		_onBatchUpdateHandlers = new List<Action<IEnumerable<IEntry<TKey, TValue>>>>();
 		_onExpiredHandlers = new List<Action<TKey, TValue>>();
 		_batchWaitTime = batchWaitTime ?? TimeSpan.FromSeconds(5);
+		_valueFormatter = valueFormatter ?? new JsonRedisValueFormatter<TValue>(JsonOptions);
 
 		// Load TTL config from Redis on startup (fire and forget, cache will be populated async)
 		_ = InitializeTtlFromRedisAsync();
@@ -272,12 +275,15 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		var result = new List<MapEntryData>();
 		foreach (var entry in entries)
 		{
+			TValue value = default!;
+			var hasValue = false;
 			try
 			{
 				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
-				var value = DeserializeValue(entry.Value!);
+				value = DeserializeValue(entry.Value!);
+				hasValue = true;
 				
-				if (key != null)
+				if (key != null && value != null)
 				{
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
@@ -285,11 +291,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get timestamp from Redis
 					var timestamp = await GetTimestampFromRedisAsync(key);
 					var timeAgo = FormatTimeAgo(timestamp);
+					var formattedValue = FormatValueForDisplay(value);
 					
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
-						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
+						Value = formattedValue,
 						Version = version.ToString().Substring(0, 8), // Short version (first 8 chars)
 						LastModified = timeAgo,
 						LastModifiedTicks = timestamp.Ticks
@@ -299,6 +306,13 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			catch
 			{
 				// Skip invalid entries
+			}
+			finally
+			{
+				if (hasValue)
+				{
+					ReturnValueToPoolIfNeeded(value);
+				}
 			}
 		}
 
@@ -349,12 +363,15 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 				break;
 			}
 
+			TValue value = default!;
+			var hasValue = false;
 			try
 			{
 				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
-				var value = DeserializeValue(entry.Value!);
+				value = DeserializeValue(entry.Value!);
+				hasValue = true;
 				
-				if (key != null)
+				if (key != null && value != null)
 				{
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
@@ -362,11 +379,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get timestamp from Redis
 					var timestamp = await GetTimestampFromRedisAsync(key);
 					var timeAgo = FormatTimeAgo(timestamp);
+					var formattedValue = FormatValueForDisplay(value);
 					
 					result.Add(new MapEntryData
 					{
 						Key = key.ToString() ?? "",
-						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
+						Value = formattedValue,
 						Version = version.ToString().Substring(0, 8), // Short version
 						LastModified = timeAgo,
 						LastModifiedTicks = timestamp.Ticks
@@ -378,6 +396,13 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			catch
 			{
 				// Skip invalid entries
+			}
+			finally
+			{
+				if (hasValue)
+				{
+					ReturnValueToPoolIfNeeded(value);
+				}
 			}
 			
 			scanned++;
@@ -411,6 +436,8 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 		// Scan từng batch thay vì load all
 		await foreach (var entry in db.HashScanAsync(hashKey, pattern: "*", pageSize: 1000))
 		{
+			TValue value = default!;
+			var hasValue = false;
 			try
 			{
 				var key = JsonSerializer.Deserialize<TKey>(entry.Name.ToString());
@@ -422,9 +449,10 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					continue;
 				}
 
-				var value = DeserializeValue(entry.Value!);
+				value = DeserializeValue(entry.Value!);
+				hasValue = true;
 				
-				if (key != null)
+				if (key != null && value != null)
 				{
 					// Get version from Redis instead of memory cache
 					var version = await GetVersionFromRedisAsync(key);
@@ -432,11 +460,12 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 					// Get timestamp from Redis
 					var timestamp = await GetTimestampFromRedisAsync(key);
 					var timeAgo = FormatTimeAgo(timestamp);
+					var formattedValue = FormatValueForDisplay(value);
 					
 					matchedEntries.Add(new MapEntryData
 					{
 						Key = keyString,
-						Value = SerializeValue(value!), // Serialize to JSON instead of ToString()
+						Value = formattedValue,
 						Version = version.ToString().Substring(0, 8), // Short version
 						LastModified = timeAgo,
 						LastModifiedTicks = timestamp.Ticks
@@ -446,6 +475,13 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 			catch
 			{
 				// Skip invalid entries
+			}
+			finally
+			{
+				if (hasValue)
+				{
+					ReturnValueToPoolIfNeeded(value);
+				}
 			}
 		}
 
@@ -970,10 +1006,21 @@ internal sealed class RedisMap<TKey, TValue> : IMap<TKey, TValue> where TKey : n
 
 	private string SerializeKey(TKey key) => JsonSerializer.Serialize(key, JsonOptions);
 
-	private string SerializeValue(TValue value) => JsonSerializer.Serialize(value, JsonOptions);
+	private RedisValue SerializeValue(TValue value) => _valueFormatter.Serialize(value);
 
-	private TValue DeserializeValue(string json) => 
-		JsonSerializer.Deserialize<TValue>(json, JsonOptions) ?? throw new InvalidOperationException("Failed to deserialize value");
+	private TValue DeserializeValue(RedisValue redisValue) => _valueFormatter.Deserialize(redisValue);
+
+	private string FormatValueForDisplay(TValue value) => _valueFormatter.ToDisplayString(value);
+
+	private void ReturnValueToPoolIfNeeded(TValue value)
+	{
+		if (!_valueFormatter.SupportsPooling || value is null)
+		{
+			return;
+		}
+
+		_valueFormatter.ReturnToPool(value);
+	}
 
 	/// <summary>
 	/// Update access time của key trong sorted set

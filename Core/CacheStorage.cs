@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using Google.Protobuf;
 using StackExchange.Redis;
 
 namespace CacheManager.Core;
@@ -15,6 +16,12 @@ namespace CacheManager.Core;
 public interface ICacheStorage
 {
 	IMap<TKey, TValue> GetOrCreateMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull;
+	IMap<TKey, TValue> GetOrCreateMapProtoBuf<TKey, TValue>(string mapName, TimeSpan? itemTtl = null)
+		where TKey : notnull
+		where TValue : class, IMessage<TValue>, new();
+	void Return<TProtobuf>(TProtobuf protobuf) where TProtobuf : class, IMessage<TProtobuf>, new();
+
+
 	IEnumerable<string> GetAllMapNames();
 	IEnumerable<string> GetAllBucketNames();
 	object? GetMapInstance(string mapName);
@@ -50,13 +57,32 @@ internal sealed class RedisCacheStorage : ICacheStorage
 
 		// Create new map if not exists
 		RegisterMap<TKey, TValue>(mapName, itemTtl);
-		
+
 		if (_maps.TryGetValue(mapName, out var created))
 		{
 			return (IMap<TKey, TValue>)created;
 		}
-		
+
 		throw new InvalidOperationException($"Failed to create map '{mapName}'");
+	}
+
+	public IMap<TKey, TValue> GetOrCreateMapProtoBuf<TKey, TValue>(string mapName, TimeSpan? itemTtl = null)
+		where TKey : notnull
+		where TValue : class, IMessage<TValue>, new()
+	{
+		if (_maps.TryGetValue(mapName, out var existing))
+		{
+			return (IMap<TKey, TValue>)existing;
+		}
+
+		RegisterMap<TKey, TValue>(mapName, itemTtl, new ProtobufRedisValueFormatter<TValue>());
+
+		if (_maps.TryGetValue(mapName, out var created))
+		{
+			return (IMap<TKey, TValue>)created;
+		}
+
+		throw new InvalidOperationException($"Failed to create protobuf map '{mapName}'");
 	}
 
 	public IEnumerable<string> GetAllMapNames()
@@ -74,21 +100,32 @@ internal sealed class RedisCacheStorage : ICacheStorage
 		return map;
 	}
 
-	internal void RegisterMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null) where TKey : notnull
+	public void Return<TProtobuf>(TProtobuf protobuf)
+		where TProtobuf : class, IMessage<TProtobuf>, new()
+	{
+		if (protobuf == null)
+		{
+			return;
+		}
+
+		ProtobufObjectPool.Return(protobuf);
+	}
+
+	internal void RegisterMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null, IRedisValueFormatter<TValue>? valueFormatter = null) where TKey : notnull
 	{
 		if (_maps.ContainsKey(mapName))
 		{
 			return;
 		}
 
-		var map = new RedisMap<TKey, TValue>(_redis, mapName, _database, _batchWaitTime);
-		
+		var map = new RedisMap<TKey, TValue>(_redis, mapName, _database, _batchWaitTime, valueFormatter);
+
 		// Set TTL if specified
 		if (itemTtl.HasValue)
 		{
 			map.SetItemExpiration(itemTtl);
 		}
-		
+
 		_maps.TryAdd(mapName, map);
 		_mapTypes.TryAdd(mapName, typeof(IMap<TKey, TValue>));
 	}
