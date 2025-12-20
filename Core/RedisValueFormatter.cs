@@ -187,6 +187,7 @@ public static class ProtobufObjectPool
         Reset(instance);
 
         var bag = Pools.GetOrAdd(typeof(TProtobuf), _ => new ConcurrentBag<IMessage>());
+        if (bag.Count >= 100) return;
         bag.Add(instance);
     }
 
