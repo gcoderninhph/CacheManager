@@ -176,6 +176,14 @@ public static class ProtobufObjectPool
 
         return new TProtobuf();
     }
+    static void ClearAll(IMessage msg)
+    {
+        foreach (var f in msg.Descriptor.Fields.InFieldNumberOrder())
+            f.Accessor.Clear(msg);
+
+        foreach (var o in msg.Descriptor.Oneofs)
+            o.Accessor.Clear(msg);
+    }
 
     public static void Return<TProtobuf>(TProtobuf instance) where TProtobuf : class, IMessage<TProtobuf>, new()
     {
@@ -185,7 +193,7 @@ public static class ProtobufObjectPool
         }
 
         Reset(instance);
-
+        ClearAll(instance);
         var bag = Pools.GetOrAdd(typeof(TProtobuf), _ => new ConcurrentBag<IMessage>());
         if (bag.Count >= 1000) return;
         bag.Add(instance);
