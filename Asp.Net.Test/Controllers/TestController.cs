@@ -85,26 +85,26 @@ public class TestController : ControllerBase
     /// Set TTL for a map (to test Redis TTL storage)
     /// </summary>
     [HttpGet("set-map-ttl")]
-    public async Task<IActionResult> SetMapTtl([FromQuery] string mapName, [FromQuery] int ttlMinutes)
+    public Task<IActionResult> SetMapTtl([FromQuery] string mapName, [FromQuery] int ttlMinutes)
     {
         try
         {
             var map = _storage.GetOrCreateMap<string, string>(mapName);
             map.SetItemExpiration(TimeSpan.FromMinutes(ttlMinutes));
             
-            return Ok(new 
+            return Task.FromResult<IActionResult>(Ok(new 
             { 
                 success = true,
                 message = $"✅ TTL set to {ttlMinutes} minutes for map '{mapName}'. TTL config stored in Redis: map:{mapName}:__meta:ttl-config"
-            });
+            }));
         }
         catch (Exception ex)
         {
-            return BadRequest(new 
+            return Task.FromResult<IActionResult>(BadRequest(new 
             { 
                 success = false,
                 message = $"❌ Error: {ex.Message}"
-            });
+            }));
         }
     }
 }

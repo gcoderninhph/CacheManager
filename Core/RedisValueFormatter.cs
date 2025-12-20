@@ -1,5 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using Google.Protobuf;
@@ -10,8 +12,8 @@ namespace CacheManager.Core;
 
 internal interface IRedisValueFormatter<TValue>
 {
-    RedisValue Serialize(TValue value);
-    TValue Deserialize(RedisValue value);
+    PooledRedisValue Serialize(TValue value);
+    TValue Deserialize(ReadOnlySpan<byte> value);
     string ToDisplayString(TValue value);
     bool SupportsPooling { get; }
     void ReturnToPool(TValue value);
@@ -26,10 +28,10 @@ internal sealed class JsonRedisValueFormatter<TValue> : IRedisValueFormatter<TVa
         _options = options;
     }
 
-    public RedisValue Serialize(TValue value) => JsonSerializer.Serialize(value, _options);
+    public PooledRedisValue Serialize(TValue value) => PooledRedisValue.FromValue(JsonSerializer.Serialize(value, _options));
 
-    public TValue Deserialize(RedisValue value) =>
-        JsonSerializer.Deserialize<TValue>(value.ToString(), _options) ??
+    public TValue Deserialize(ReadOnlySpan<byte> value) =>
+        JsonSerializer.Deserialize<TValue>(value, _options) ??
         throw new InvalidOperationException("Failed to deserialize value from Redis");
 
     public string ToDisplayString(TValue value) => JsonSerializer.Serialize(value, _options);
@@ -45,26 +47,33 @@ internal sealed class JsonRedisValueFormatter<TValue> : IRedisValueFormatter<TVa
 internal sealed class ProtobufRedisValueFormatter<TValue> : IRedisValueFormatter<TValue>
     where TValue : class, IMessage<TValue>, new()
 {
-    public RedisValue Serialize(TValue value)
+    public PooledRedisValue Serialize(TValue value)
     {
         if (value == null)
         {
             throw new ArgumentNullException(nameof(value));
         }
 
-        return value.ToByteArray();
-    }
-
-    public TValue Deserialize(RedisValue value)
-    {
-        if (!value.HasValue)
+        var size = value.CalculateSize();
+        if (size == 0)
         {
-            throw new InvalidOperationException("Cannot deserialize an empty Redis value");
+            return PooledRedisValue.FromValue(RedisValue.EmptyString);
         }
 
+        var buffer = ExactByteArrayPool.Rent(size);
+        value.WriteTo(buffer.AsSpan(0, size));
+
+        return PooledRedisValue.FromOwnedBuffer(buffer, size);
+    }
+
+    public TValue Deserialize(ReadOnlySpan<byte> value)
+    {
         var instance = ProtobufObjectPool.Rent<TValue>();
-        var bytes = (byte[])value!;
-        instance.MergeFrom(bytes);
+        if (!value.IsEmpty)
+        {
+            instance.MergeFrom(value);
+        }
+
         return instance;
     }
 
@@ -89,7 +98,71 @@ internal sealed class ProtobufRedisValueFormatter<TValue> : IRedisValueFormatter
     }
 }
 
-internal static class ProtobufObjectPool
+internal readonly struct PooledRedisValue : IDisposable
+{
+    private readonly byte[]? _buffer;
+
+    private PooledRedisValue(RedisValue value, byte[]? buffer)
+    {
+        Value = value;
+        _buffer = buffer;
+    }
+
+    public RedisValue Value { get; }
+
+    public static PooledRedisValue FromOwnedBuffer(byte[] buffer, int length)
+    {
+        if (buffer == null)
+        {
+            throw new ArgumentNullException(nameof(buffer));
+        }
+
+        if ((uint)length > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+
+        var memory = new ReadOnlyMemory<byte>(buffer, 0, length);
+        return new PooledRedisValue(memory, buffer);
+    }
+
+    public static PooledRedisValue FromValue(RedisValue value) => new(value, null);
+
+    public static implicit operator RedisValue(PooledRedisValue value) => value.Value;
+
+    public void Dispose()
+    {
+        if (_buffer != null)
+        {
+            ExactByteArrayPool.Return(_buffer);
+        }
+    }
+}
+
+internal static class ExactByteArrayPool
+{
+    public static byte[] Rent(int size)
+    {
+        if (size <= 0)
+        {
+            return Array.Empty<byte>();
+        }
+
+        return ArrayPool<byte>.Shared.Rent(size);
+    }
+
+    public static void Return(byte[] buffer)
+    {
+        if (buffer == null || buffer.Length == 0)
+        {
+            return;
+        }
+
+        ArrayPool<byte>.Shared.Return(buffer);
+    }
+}
+
+public static class ProtobufObjectPool
 {
     private static readonly ConcurrentDictionary<Type, ConcurrentBag<IMessage>> Pools = new();
 

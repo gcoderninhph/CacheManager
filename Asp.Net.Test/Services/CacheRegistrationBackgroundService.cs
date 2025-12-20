@@ -20,7 +20,7 @@ public class CacheRegistrationBackgroundService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -44,5 +44,6 @@ public class CacheRegistrationBackgroundService : BackgroundService
             _logger.LogError(ex, "Error during CacheManager initialization");
             throw;
         }
+        return Task.CompletedTask;
     }
 }

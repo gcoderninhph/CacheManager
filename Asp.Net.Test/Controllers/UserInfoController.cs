@@ -99,22 +99,22 @@ public class UserInfoController : ControllerBase
     /// Delete a user
     /// </summary>
     [HttpDelete("{userId}")]
-    public async Task<IActionResult> DeleteUserInfo(string userId)
+    public Task<IActionResult> DeleteUserInfo(string userId)
     {
         try
         {
             // Note: IMap doesn't have RemoveAsync, only ClearAsync
             // For individual deletion, we need to use Redis directly or use a workaround
             // For now, return NotImplemented
-            return StatusCode(501, new 
+            return Task.FromResult<IActionResult>(StatusCode(501, new 
             { 
                 error = "Individual user deletion not supported",
                 message = "Use DELETE /api/userinfo to clear all users, or implement custom Redis delete"
-            });
+            }));
         }
         catch (Exception ex)
         {
-            return Problem($"Error: {ex.Message}");
+            return Task.FromResult<IActionResult>(Problem($"Error: {ex.Message}"));
         }
     }
 

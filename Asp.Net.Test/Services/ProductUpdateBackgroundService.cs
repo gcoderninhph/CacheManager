@@ -35,12 +35,12 @@ public class ProductUpdateBackgroundService : BackgroundService
         var productsMap = storage.GetOrCreateMap<int, Product>("products");
 
         // Setup batch update listener
-        productsMap.OnBatchUpdate(entries =>
+        productsMap.OnBatchUpdate((entries) =>
         {
             var entryList = entries.ToList();
             _logger.LogInformation("=== BATCH UPDATE TRIGGERED ===");
             _logger.LogInformation($"Total items in batch: {entryList.Count}");
-            
+
             foreach (var entry in entryList)
             {
                 var product = entry.GetValue();
@@ -50,8 +50,9 @@ public class ProductUpdateBackgroundService : BackgroundService
                     $"Updates: {product.UpdateCount}"
                 );
             }
-            
+
             _logger.LogInformation("==============================\n");
+            return Task.CompletedTask;
         });
 
         // Initialize 100 products
@@ -67,7 +68,7 @@ public class ProductUpdateBackgroundService : BackgroundService
                 LastUpdated = DateTime.UtcNow,
                 UpdateCount = 0
             };
-            
+
             await productsMap.SetValueAsync(i, product);
         }
         _logger.LogInformation("✅ 100 products initialized successfully\n");
@@ -80,7 +81,7 @@ public class ProductUpdateBackgroundService : BackgroundService
                 await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
 
                 _logger.LogInformation("🔄 Starting random product updates...");
-                
+
                 // Select 5 random product IDs
                 var randomIds = Enumerable.Range(1, 100)
                     .OrderBy(_ => _random.Next())
@@ -92,7 +93,13 @@ public class ProductUpdateBackgroundService : BackgroundService
                     try
                     {
                         var product = await productsMap.GetValueAsync(productId);
-                        
+
+                        if (product == null)
+                        {
+                            _logger.LogWarning($"Product with ID {productId} not found");
+                            continue;
+                        }
+
                         // Update product data
                         product.Price = (decimal)(_random.NextDouble() * 100 + 10);
                         product.Stock = _random.Next(0, 1000);
@@ -100,7 +107,7 @@ public class ProductUpdateBackgroundService : BackgroundService
                         product.UpdateCount++;
 
                         await productsMap.SetValueAsync(productId, product);
-                        
+
                         _logger.LogInformation(
                             $"  Updated Product #{productId}: {product.Name} | " +
                             $"New Price: ${product.Price:F2} | New Stock: {product.Stock}"
@@ -113,7 +120,7 @@ public class ProductUpdateBackgroundService : BackgroundService
                 }
 
                 _logger.LogInformation($"✅ Updated {randomIds.Count} products. Waiting 3 seconds for batch...\n");
-                
+
                 // Wait a bit for batch to trigger (batch wait time is 5 seconds by default)
                 await Task.Delay(TimeSpan.FromSeconds(6), stoppingToken);
             }

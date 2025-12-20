@@ -38,6 +38,8 @@ public class TtlTestController : ControllerBase
                 $"Created: {session.CreatedAt:HH:mm:ss} | " +
                 $"Last Access: {session.LastAccessAt:HH:mm:ss}"
             );
+
+            return Task.CompletedTask;
         });
 
         var created = new List<TempSession>();

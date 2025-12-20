@@ -19,8 +19,6 @@ public interface ICacheStorage
 	IMap<TKey, TValue> GetOrCreateMapProtoBuf<TKey, TValue>(string mapName, TimeSpan? itemTtl = null)
 		where TKey : notnull
 		where TValue : class, IMessage<TValue>, new();
-	void Return<TProtobuf>(TProtobuf protobuf) where TProtobuf : class, IMessage<TProtobuf>, new();
-
 
 	IEnumerable<string> GetAllMapNames();
 	IEnumerable<string> GetAllBucketNames();
@@ -98,17 +96,6 @@ internal sealed class RedisCacheStorage : ICacheStorage
 	{
 		_maps.TryGetValue(mapName, out var map);
 		return map;
-	}
-
-	public void Return<TProtobuf>(TProtobuf protobuf)
-		where TProtobuf : class, IMessage<TProtobuf>, new()
-	{
-		if (protobuf == null)
-		{
-			return;
-		}
-
-		ProtobufObjectPool.Return(protobuf);
 	}
 
 	internal void RegisterMap<TKey, TValue>(string mapName, TimeSpan? itemTtl = null, IRedisValueFormatter<TValue>? valueFormatter = null) where TKey : notnull

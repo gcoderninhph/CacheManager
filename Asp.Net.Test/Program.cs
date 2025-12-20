@@ -22,6 +22,7 @@ builder.Services.AddCacheManager(builder.Configuration);
 // Register background services
 builder.Services.AddHostedService<CacheRegistrationBackgroundService>();
 builder.Services.AddHostedService<ProductUpdateBackgroundService>();
+builder.Services.AddHostedService<ProtoMapTestBackgroundService>();
 
 var app = builder.Build();
 

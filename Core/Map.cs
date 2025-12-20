@@ -17,19 +17,19 @@ public interface IMap<TKey, TValue>
     /// <summary>
     /// Chạy callback khi có sự kiện thêm
     /// </summary>
-    void OnAdd(Action<TKey, TValue> addAction);
+    void OnAdd(Func<TKey, TValue, Task> addAction);
     /// <summary>
     /// Chạy callback khi có sự kiện cập nhật
     /// </summary>
-    void OnUpdate(Action<TKey, TValue> updateAction);
+    void OnUpdate(Func<TKey, TValue, Task> updateAction);
     /// <summary>
     /// Chạy callback khi có sự kiện xóa
     /// </summary>
-    void OnRemove(Action<TKey, TValue> removeAction);
+    void OnRemove(Func<TKey, TValue, Task> removeAction);
     /// <summary>
     /// Chạy callback khi có sự kiện xóa tất cả
     /// </summary>
-    void OnClear(Action clearAction);
+    void OnClear(Func<Task> clearAction);
 
     /// <summary>
     /// Gom tất cả những (key/value) có thay đổi trong một khoảng thời gian nhất định rồi gọi callback một lần, call back này mục đích để bên asp.net cập nhật db
@@ -38,7 +38,7 @@ public interface IMap<TKey, TValue>
     /// thời gian chờ được config trong appsetting.json của asp.net
     /// thời gian check gom batch là 1s
     /// </summary>
-    void OnBatchUpdate(Action<IEnumerable<IEntry<TKey, TValue>>> batchUpdateAction);
+    void OnBatchUpdate(Func<IEnumerable<IEntry<TKey, TValue>>, Task> batchUpdateAction);
 
     /// <summary>
     /// Cấu hình TTL (Time To Live) cho từng phần tử trong map
@@ -52,7 +52,7 @@ public interface IMap<TKey, TValue>
     /// <summary>
     /// Callback khi một phần tử hết hạn và bị xóa tự động
     /// </summary>
-    void OnExpired(Action<TKey, TValue> expiredAction);
+    void OnExpired(Func<TKey, TValue, Task> expiredAction);
     /// <summary>
     /// Kiểm tra key có tồn tại trong map không
     /// </summary>
