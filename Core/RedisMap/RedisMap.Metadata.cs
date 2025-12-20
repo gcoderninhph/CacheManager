@@ -44,16 +44,6 @@ internal sealed partial class RedisMap<TKey, TValue>
 
     private string FormatValueForDisplay(TValue value) => _valueFormatter.ToDisplayString(value);
 
-    private void ReturnValueToPoolIfNeeded(TValue value)
-    {
-        if (!_valueFormatter.SupportsPooling || value is null)
-        {
-            return;
-        }
-
-        _valueFormatter.ReturnToPool(value);
-    }
-
     private async Task<Guid> GetVersionFromRedisAsync(TKey key)
     {
         var db = _redis.GetDatabase(_database);

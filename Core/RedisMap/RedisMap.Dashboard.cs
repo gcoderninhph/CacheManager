@@ -119,7 +119,6 @@ internal sealed partial class RedisMap<TKey, TValue>
     private async Task<MapEntryData?> BuildMapEntryDataAsync(IDatabase db, RedisKey hashKey, RedisValue rawKey, Func<string, bool>? keyFilter = null)
     {
         TValue? value = default;
-        var hasValue = false;
 
         try
         {
@@ -140,7 +139,6 @@ internal sealed partial class RedisMap<TKey, TValue>
             }
 
             value = deserializedValue;
-            hasValue = true;
 
             if (value == null || key == null)
             {
@@ -162,13 +160,6 @@ internal sealed partial class RedisMap<TKey, TValue>
         catch
         {
             return null;
-        }
-        finally
-        {
-            if (hasValue && value != null)
-            {
-                ReturnValueToPoolIfNeeded(value);
-            }
         }
     }
 

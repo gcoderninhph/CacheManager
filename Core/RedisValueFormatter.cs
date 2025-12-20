@@ -15,8 +15,7 @@ internal interface IRedisValueFormatter<TValue>
     PooledRedisValue Serialize(TValue value);
     TValue Deserialize(ReadOnlySpan<byte> value);
     string ToDisplayString(TValue value);
-    bool SupportsPooling { get; }
-    void ReturnToPool(TValue value);
+
 }
 
 internal sealed class JsonRedisValueFormatter<TValue> : IRedisValueFormatter<TValue>
@@ -68,7 +67,7 @@ internal sealed class ProtobufRedisValueFormatter<TValue> : IRedisValueFormatter
 
     public TValue Deserialize(ReadOnlySpan<byte> value)
     {
-        var instance = ProtobufObjectPool.Rent<TValue>();
+        var instance = new TValue();
         if (!value.IsEmpty)
         {
             instance.MergeFrom(value);
@@ -88,14 +87,6 @@ internal sealed class ProtobufRedisValueFormatter<TValue> : IRedisValueFormatter
     }
 
     public bool SupportsPooling => true;
-
-    public void ReturnToPool(TValue value)
-    {
-        if (value != null)
-        {
-            ProtobufObjectPool.Return(value);
-        }
-    }
 }
 
 internal readonly struct PooledRedisValue : IDisposable
@@ -159,91 +150,5 @@ internal static class ExactByteArrayPool
         }
 
         ArrayPool<byte>.Shared.Return(buffer);
-    }
-}
-
-public static class ProtobufObjectPool
-{
-    private static readonly ConcurrentDictionary<Type, ConcurrentBag<IMessage>> Pools = new();
-
-    public static TProtobuf Rent<TProtobuf>() where TProtobuf : class, IMessage<TProtobuf>, new()
-    {
-        var bag = Pools.GetOrAdd(typeof(TProtobuf), _ => new ConcurrentBag<IMessage>());
-        if (bag.TryTake(out var instance) && instance is TProtobuf typed)
-        {
-            return typed;
-        }
-
-        return new TProtobuf();
-    }
-    static void ClearAll(IMessage msg)
-    {
-        foreach (var f in msg.Descriptor.Fields.InFieldNumberOrder())
-            f.Accessor.Clear(msg);
-
-        foreach (var o in msg.Descriptor.Oneofs)
-            o.Accessor.Clear(msg);
-    }
-
-    public static void Return<TProtobuf>(TProtobuf instance) where TProtobuf : class, IMessage<TProtobuf>, new()
-    {
-        if (instance == null)
-        {
-            return;
-        }
-
-        Reset(instance);
-        ClearAll(instance);
-        var bag = Pools.GetOrAdd(typeof(TProtobuf), _ => new ConcurrentBag<IMessage>());
-        if (bag.Count >= 1000) return;
-        bag.Add(instance);
-    }
-
-    private static void Reset(IMessage message)
-    {
-        var descriptor = message.Descriptor;
-        foreach (var field in descriptor.Fields.InDeclarationOrder())
-        {
-            field.Accessor.Clear(message);
-        }
-
-        ClearUnknownFields(message);
-    }
-
-    private static void ClearUnknownFields(IMessage message)
-    {
-        var type = message.GetType();
-
-        var clearUnknownFields = type.GetMethod(
-            "ClearUnknownFields",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            Type.DefaultBinder,
-            Type.EmptyTypes,
-            null);
-
-        if (clearUnknownFields != null)
-        {
-            clearUnknownFields.Invoke(message, null);
-            return;
-        }
-
-        var mergeUnknownFields = type.GetMethod(
-            "MergeUnknownFields",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            Type.DefaultBinder,
-            new[] { typeof(UnknownFieldSet) },
-            null);
-
-        if (mergeUnknownFields != null)
-        {
-            mergeUnknownFields.Invoke(message, new object?[] { null });
-            return;
-        }
-
-        var unknownFieldsField = type.GetField("_unknownFields", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (unknownFieldsField != null)
-        {
-            unknownFieldsField.SetValue(message, null);
-        }
     }
 }

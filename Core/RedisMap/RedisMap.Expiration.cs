@@ -81,13 +81,6 @@ internal sealed partial class RedisMap<TKey, TValue>
                 {
                     // Ignore individual key errors
                 }
-                finally
-                {
-                    if (expiredValue != null)
-                    {
-                        ReturnValueToPoolIfNeeded(expiredValue);
-                    }
-                }
             }
         }
         catch

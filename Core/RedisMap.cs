@@ -371,11 +371,6 @@ internal sealed partial class RedisMap<TKey, TValue> : IMap<TKey, TValue>
 
 		if (!await db.HashDeleteAsync(hashKey, serializedKey))
 		{
-			if (removedValue != null)
-			{
-				ReturnValueToPoolIfNeeded(removedValue);
-			}
-
 			return false;
 		}
 
@@ -383,11 +378,6 @@ internal sealed partial class RedisMap<TKey, TValue> : IMap<TKey, TValue>
 		await RemoveVersionFromRedisAsync(key);
 
 		await TriggerRemoveHandlers(key, removedValue!);
-
-		if (removedValue != null)
-		{
-			ReturnValueToPoolIfNeeded(removedValue);
-		}
 
 		return true;
 	}

@@ -102,9 +102,9 @@ public sealed class ProtoMapTestBackgroundService : BackgroundService
         {
             // Ignore logging exceptions to keep loop alive.
         }
-        finally
-        {
-            ProtobufObjectPool.Return(stored);
-        }
+        // finally
+        // {
+        //     ProtobufObjectPool.Return(stored);
+        // }
     }
 }
