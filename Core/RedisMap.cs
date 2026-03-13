@@ -399,19 +399,27 @@ internal sealed partial class RedisMap<TKey, TValue> : IMap<TKey, TValue>
 		{
 			return (false, default);
 		}
-
-		using (lease)
+		try
 		{
-			if (lease.Length == 0)
-			{
-				var exists = await db.HashExistsAsync(hashKey, serializedKey);
-				if (!exists)
-				{
-					return (false, default);
-				}
-			}
 
-			return (true, DeserializeValue(lease.Span));
+			using (lease)
+			{
+				if (lease.Length == 0)
+				{
+					var exists = await db.HashExistsAsync(hashKey, serializedKey);
+					if (!exists)
+					{
+						return (false, default);
+					}
+				}
+
+				return (true, DeserializeValue(lease.Span));
+			}
+		}
+		catch
+		{
+			await db.HashDeleteAsync(hashKey, serializedKey);
+			return (false, default);
 		}
 	}
 
